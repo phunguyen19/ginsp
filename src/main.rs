@@ -18,9 +18,8 @@ enum SubCommand {
     /// and `git pull` on each branch.
     Update(Update),
 
-    /// Compare two branches by git commit messages.
-    /// Show the commits unique to each branch.
-    Diff(Diff),
+    /// Compare two branches by commit messages.
+    DiffMessage(DiffMessage),
 }
 
 #[derive(Parser, Debug)]
@@ -32,14 +31,16 @@ struct Update {
 }
 
 #[derive(Parser, Debug)]
-struct Diff {
+struct DiffMessage {
     /// Two branches to compare.
     #[clap(name = "branches", required = true)]
     branches: Vec<String>,
 
-    /// Cherry pick the commits from the source branch to the target branch
-    #[clap(short, long, num_args = 1, name = "commit messages")]
-    cherry_pick: Option<String>,
+    /// Cherry pick commits that contains the given string.
+    /// Multiple strings can be separated by comma.
+    /// For example: `ginsp diff-message master develop -c "fix,feat"`
+    #[clap(short = 'c', long, num_args = 1)]
+    pick_contains: Option<String>,
 }
 
 fn exit_with_error(error: &str) {
@@ -123,7 +124,7 @@ fn command_update(branches: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-fn command_diff(diff_options: &Diff) -> Result<()> {
+fn command_diff(diff_options: &DiffMessage) -> Result<()> {
     let source_branch = &diff_options.branches[0];
     let target_branch = &diff_options.branches[1];
 
@@ -155,7 +156,7 @@ fn command_diff(diff_options: &Diff) -> Result<()> {
         .collect::<Vec<_>>();
 
     let cherry_pick_messages = diff_options
-        .cherry_pick
+        .pick_contains
         .as_ref()
         .map(|s| s.split(',').collect::<Vec<_>>())
         .unwrap_or_default();
@@ -180,7 +181,7 @@ fn command_diff(diff_options: &Diff) -> Result<()> {
     if cherry_pick_messages.len() > 0 {
         println!(
             "Cherry picking {}...",
-            diff_options.cherry_pick.as_ref().unwrap()
+            diff_options.pick_contains.as_ref().unwrap()
         );
         // for each unique commit on source branch, if in the cherry pick list, cherry pick it to target branch
         'outer: for (hash, message) in unique_to_source.iter().rev() {
@@ -274,7 +275,7 @@ fn main() -> Result<()> {
         SubCommand::Update(update) => {
             command_update(update.branches.clone())?;
         }
-        SubCommand::Diff(diff) => {
+        SubCommand::DiffMessage(diff) => {
             command_diff(diff)?;
         }
     }
