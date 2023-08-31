@@ -1,4 +1,5 @@
 use clap::{command, Parser, Subcommand};
+use indexmap::indexmap;
 use std::collections::HashMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -62,9 +63,11 @@ fn get_commits_info(branch: &str) -> Vec<String> {
 
 fn update_command(branches: Vec<String>) {
     println!("Updating all branches");
-    let fetching_output = Command::new("sh")
-        .arg("-c")
-        .arg(format!("git fetch --all --prune --tags"))
+    let fetching_output = Command::new("git")
+        .arg("fetch")
+        .arg("--all")
+        .arg("--prune")
+        .arg("--tags")
         .output()
         .map(|v| String::from_utf8(v.stdout))
         .expect("Failed to run git command")
@@ -75,13 +78,24 @@ fn update_command(branches: Vec<String>) {
     for branch in branches.iter() {
         println!("Updating branch: {}", branch);
 
-        let o = Command::new("sh")
-            .arg("-c")
-            .arg(format!("git pull {}", branch))
+        let mut o = Command::new("git")
+            .arg("checkout")
+            .arg(branch)
             .output()
             .map(|v| String::from_utf8(v.stdout))
             .expect("Failed to run git command")
             .expect("Failed to run git command");
+
+        println!("{}", o);
+
+        o = Command::new("git")
+            .arg("pull")
+            .arg(branch)
+            .output()
+            .map(|v| String::from_utf8(v.stdout))
+            .expect("Failed to run git command")
+            .expect("Failed to run git command");
+
         println!("{}", o);
     }
 }
@@ -90,13 +104,13 @@ fn diff_command((source_branch, target_branch): (String, String)) {
     let source_commits = get_commits_info(source_branch.as_str());
     let target_commits = get_commits_info(target_branch.as_str());
 
-    let mut source_map = HashMap::new();
+    let mut source_map = indexmap!();
     for commit in source_commits.iter() {
         let (hash, message) = commit.split_at(9);
         source_map.insert(message.trim(), hash.trim());
     }
 
-    let mut target_map = HashMap::new();
+    let mut target_map = indexmap!();
     for commit in target_commits.iter() {
         let (hash, message) = commit.split_at(9);
         target_map.insert(message.trim(), hash.trim());
