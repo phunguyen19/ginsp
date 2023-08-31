@@ -2,7 +2,7 @@ use anyhow::{Ok, Result};
 use clap::Parser;
 use indexmap::indexmap;
 
-use std::process::Command;
+use std::{collections::HashSet, process::Command};
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -38,8 +38,8 @@ struct Diff {
     branches: Vec<String>,
 
     /// Cherry pick the commits from the source branch to the target branch
-    #[clap(long, default_value = "false")]
-    cherry_pick: bool,
+    #[clap(short, long, num_args = 1, name = "commit messages")]
+    cherry_pick: Option<String>,
 }
 
 fn exit_with_error(error: &str) {
@@ -80,10 +80,12 @@ fn fetch_all() -> Result<()> {
         .arg("--prune")
         .arg("--tags")
         .output()?;
+
     if !output.status.success() {
         let err = String::from_utf8(output.stderr)?;
         exit_with_error(&format!("Fail to fetch all. Error: {}", err));
     }
+
     println!("{}", String::from_utf8(output.stdout)?);
     Ok(())
 }
@@ -121,7 +123,10 @@ fn command_update(branches: Vec<String>) -> Result<()> {
     Ok(())
 }
 
-fn command_diff((source_branch, target_branch): (String, String)) -> Result<()> {
+fn command_diff(diff_options: &Diff) -> Result<()> {
+    let source_branch = &diff_options.branches[0];
+    let target_branch = &diff_options.branches[1];
+
     let source_commits = get_commits_info(source_branch.as_str())?;
     let target_commits = get_commits_info(target_branch.as_str())?;
 
@@ -149,16 +154,112 @@ fn command_diff((source_branch, target_branch): (String, String)) -> Result<()> 
         .map(|(message, hash)| (hash.to_string(), message.to_string()))
         .collect::<Vec<_>>();
 
+    let cherry_pick_messages = diff_options
+        .cherry_pick
+        .as_ref()
+        .map(|s| s.split(',').collect::<Vec<_>>())
+        .unwrap_or_default();
+
+    // HashSet picked commits
+    let mut picked_vec = HashSet::new();
+
+    // get last commit hash before cherry pick
+    let output = Command::new("git")
+        .arg("log")
+        .arg("-1")
+        .arg("--pretty=%h")
+        .output()?;
+
+    if !output.status.success() {
+        let err = String::from_utf8(output.stderr)?;
+        exit_with_error(&format!("Fail to get last commit hash. Error: {}", err));
+    }
+
+    let last_commit_hash = String::from_utf8(output.stdout)?.trim().to_string();
+
+    if cherry_pick_messages.len() > 0 {
+        println!(
+            "Cherry picking {}...",
+            diff_options.cherry_pick.as_ref().unwrap()
+        );
+        // for each unique commit on source branch, if in the cherry pick list, cherry pick it to target branch
+        'outer: for (hash, message) in unique_to_source.iter().rev() {
+            // for each cherry pick commit message
+            // if the cherry pick commit message is a substring of the source commit message
+            // cherry pick the source commit to target branch
+            'inner: for cherry_pick_message in cherry_pick_messages.iter() {
+                if !message.contains(cherry_pick_message) {
+                    continue 'inner;
+                }
+
+                println!("Cherry picking {} - {}", hash, message);
+                let output = Command::new("git").arg("cherry-pick").arg(hash).output()?;
+                if output.status.success() {
+                    picked_vec.insert(hash);
+                    continue 'outer;
+                }
+
+                println!("Fail to cherry pick commit {} - {}", hash, message);
+
+                // cherry-pick abort
+                println!("Abort cherry pick...");
+                let output = Command::new("git")
+                    .arg("cherry-pick")
+                    .arg("--abort")
+                    .output()?;
+
+                if !output.status.success() {
+                    let err = String::from_utf8(output.stderr)?;
+                    exit_with_error(&format!(
+                        "Fail to abort cherry pick commit '{}'. Error: {}",
+                        hash, err
+                    ));
+                }
+                // reset to last commit hash
+                println!("Reset to commit hash {}...", last_commit_hash);
+                let output = Command::new("git")
+                    .arg("reset")
+                    .arg("--hard")
+                    .arg(&last_commit_hash)
+                    .output()?;
+
+                if !output.status.success() {
+                    exit_with_error(&format!(
+                        "Fail to reset to commit hash {}. Error: {}",
+                        last_commit_hash,
+                        String::from_utf8(output.stderr)?
+                    ));
+                }
+
+                exit_with_error(&format!(
+                    "Error: Fail to cherry pick commit {} - {}",
+                    hash, message
+                ));
+            }
+        }
+    }
+
     println!("Commit messages unique on {}:", source_branch);
-    println!("--------");
-    for (hash, message) in unique_to_source {
-        println!("{:>7} - {}", hash, message);
+    println!("------------------------");
+    for (hash, message) in unique_to_source.iter() {
+        println!(
+            "{:>3} {} - {}",
+            {
+                if picked_vec.contains(&hash) {
+                    "->"
+                } else {
+                    ""
+                }
+            },
+            &hash,
+            message
+        );
     }
 
     println!("\nCommit messages unique on {}:", target_branch);
-    println!("--------");
+    println!("------------------------");
     for (hash, message) in unique_to_target {
-        println!("{:>7} - {}", hash, message);
+        println!("{:>3} {} - {}", "", &hash, message);
     }
 
     Ok(())
@@ -174,7 +275,7 @@ fn main() -> Result<()> {
             command_update(update.branches.clone())?;
         }
         SubCommand::Diff(diff) => {
-            command_diff((diff.branches[0].clone(), diff.branches[1].clone()))?;
+            command_diff(diff)?;
         }
     }
 
