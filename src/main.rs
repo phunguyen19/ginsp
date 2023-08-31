@@ -1,6 +1,7 @@
 use clap::{command, Parser, Subcommand};
 use std::collections::HashMap;
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -60,72 +61,84 @@ fn get_commits_info(branch: &str) -> Vec<String> {
 }
 
 fn update_command(branches: Vec<String>) {
-    Command::new("git")
-        .args(["fetch", "--all", "--prune", "--tags"])
-        .spawn()
+    println!("Updating all branches");
+    let fetching_output = Command::new("sh")
+        .arg("-c")
+        .arg(format!("git fetch --all --prune --tags"))
+        .output()
+        .map(|v| String::from_utf8(v.stdout))
+        .expect("Failed to run git command")
         .expect("Failed to run git command");
 
+    println!("{}", fetching_output);
+
     for branch in branches.iter() {
-        Command::new("git")
-            .args(["pull", branch])
-            .spawn()
+        println!("Updating branch: {}", branch);
+
+        let o = Command::new("sh")
+            .arg("-c")
+            .arg(format!("git pull {}", branch))
+            .output()
+            .map(|v| String::from_utf8(v.stdout))
+            .expect("Failed to run git command")
             .expect("Failed to run git command");
+        println!("{}", o);
+    }
+}
+
+fn diff_command((source_branch, target_branch): (String, String)) {
+    let source_commits = get_commits_info(source_branch.as_str());
+    let target_commits = get_commits_info(target_branch.as_str());
+
+    let mut source_map = HashMap::new();
+    for commit in source_commits.iter() {
+        let (hash, message) = commit.split_at(9);
+        source_map.insert(message.trim(), hash.trim());
+    }
+
+    let mut target_map = HashMap::new();
+    for commit in target_commits.iter() {
+        let (hash, message) = commit.split_at(9);
+        target_map.insert(message.trim(), hash.trim());
+    }
+
+    let unique_to_source = source_map
+        .iter()
+        .filter(|(message, _)| !target_map.contains_key(*message))
+        .map(|(message, hash)| (hash.to_string(), message.to_string()))
+        .collect::<Vec<_>>();
+
+    let unique_to_target = target_map
+        .iter()
+        .filter(|(message, _)| !source_map.contains_key(*message))
+        .map(|(message, hash)| (hash.to_string(), message.to_string()))
+        .collect::<Vec<_>>();
+
+    println!("Commit messages unique on {}:", source_branch);
+    println!("--------");
+    for (hash, message) in unique_to_source {
+        println!("{:>7} - {}", hash, message);
+    }
+
+    println!("\nCommit messages unique on {}:", target_branch);
+    println!("--------");
+    for (hash, message) in unique_to_target {
+        println!("{:>7} - {}", hash, message);
     }
 }
 
 fn main() {
+    let _ = Command::new("git").arg("fetch").spawn();
+
     let options = Cli::parse();
 
-    println!("Command: {:?}", options);
-
     // if sub command is update
-    if let SubCommand::Update(update) = options.subcommand {
-        update_command(update.branches);
+    if let SubCommand::Update(update) = &options.subcommand {
+        update_command(update.branches.clone());
     }
 
     // if sub command is diff
-
-    // let args: Vec<String> = std::env::args().collect();
-
-    // let source_branch = &args[1];
-    // let target_branch = &args[2];
-
-    // let source_commits = get_commits_info(source_branch.as_str());
-    // let target_commits = get_commits_info(target_branch.as_str());
-
-    // let mut source_map = HashMap::new();
-    // for commit in source_commits.iter() {
-    //     let (hash, message) = commit.split_at(9);
-    //     source_map.insert(message.trim(), hash.trim());
-    // }
-
-    // let mut target_map = HashMap::new();
-    // for commit in target_commits.iter() {
-    //     let (hash, message) = commit.split_at(9);
-    //     target_map.insert(message.trim(), hash.trim());
-    // }
-
-    // let unique_to_source = source_map
-    //     .iter()
-    //     .filter(|(message, _)| !target_map.contains_key(*message))
-    //     .map(|(message, hash)| (hash.to_string(), message.to_string()))
-    //     .collect::<Vec<_>>();
-
-    // let unique_to_target = target_map
-    //     .iter()
-    //     .filter(|(message, _)| !source_map.contains_key(*message))
-    //     .map(|(message, hash)| (hash.to_string(), message.to_string()))
-    //     .collect::<Vec<_>>();
-
-    // println!("Commit messages unique on {}:", source_branch);
-    // println!("--------");
-    // for (hash, message) in unique_to_source {
-    //     println!("{:>7} - {}", hash, message);
-    // }
-
-    // println!("\nCommit messages unique on {}:", target_branch);
-    // println!("--------");
-    // for (hash, message) in unique_to_target {
-    //     println!("{:>7} - {}", hash, message);
-    // }
+    if let SubCommand::Diff(diff) = &options.subcommand {
+        diff_command((diff.branches[0].clone(), diff.branches[1].clone()));
+    }
 }
