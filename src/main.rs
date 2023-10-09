@@ -267,8 +267,6 @@ fn command_diff(diff_options: &DiffMessage) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let _ = Command::new("git").arg("fetch").spawn();
-
     let options = Cli::parse();
 
     match &options.subcommand {
