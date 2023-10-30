@@ -66,7 +66,7 @@ fn get_commits_info(branch: &str) -> Result<Vec<String>> {
         .split('\n')
         .map(|commit| {
             let (hash, message) = commit.split_at(7);
-            format!("{}{}", hash, message)
+            format!("{}::{}", hash, message)
         })
         .collect();
 
@@ -118,8 +118,8 @@ fn command_update(branches: Vec<String>) -> Result<()> {
     fetch_all()?;
     for branch in branches.iter() {
         println!("Updating branch '{}'", branch);
-        checkout_branch(&branch)?;
-        pull_branch(&branch)?;
+        checkout_branch(branch)?;
+        pull_branch(branch)?;
     }
     Ok(())
 }
@@ -132,14 +132,39 @@ fn command_diff(diff_options: &DiffMessage) -> Result<()> {
     let target_commits = get_commits_info(target_branch.as_str())?;
 
     let mut source_map = indexmap!();
+
     for commit in source_commits.iter() {
-        let (hash, message) = commit.split_at(9);
+        let (hash, message) = match commit.split_once("::") {
+            Some((hash, message)) => (hash, message),
+            None => ("", ""),
+        };
+
+        if hash.is_empty() || message.is_empty() {
+            exit_with_error(&format!(
+                "Fail to parse commit info '{}' of branch {}",
+                commit.as_str(),
+                source_branch
+            ));
+        }
+
         source_map.insert(message.trim(), hash.trim());
     }
 
     let mut target_map = indexmap!();
     for commit in target_commits.iter() {
-        let (hash, message) = commit.split_at(9);
+        let (hash, message) = match commit.split_once("::") {
+            Some((hash, message)) => (hash, message),
+            None => ("", ""),
+        };
+
+        if hash.is_empty() || message.is_empty() {
+            exit_with_error(&format!(
+                "Fail to parse commit info '{}' of branch {}",
+                commit.as_str(),
+                target_branch
+            ));
+        }
+
         target_map.insert(message.trim(), hash.trim());
     }
 
@@ -178,7 +203,7 @@ fn command_diff(diff_options: &DiffMessage) -> Result<()> {
 
     let last_commit_hash = String::from_utf8(output.stdout)?.trim().to_string();
 
-    if cherry_pick_messages.len() > 0 {
+    if !cherry_pick_messages.is_empty() {
         println!(
             "Cherry picking {}...",
             diff_options.pick_contains.as_ref().unwrap()
