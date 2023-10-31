@@ -49,7 +49,7 @@ fn exit_with_error(error: &str) {
 }
 
 fn get_commits_info(branch: &str) -> Result<Vec<String>> {
-    let command = format!("git log --format=%h%s {}", branch);
+    let command = format!("git log --format=%h%s --abbrev=7 {}", branch);
     let output = Command::new("sh").arg("-c").arg(command).output()?;
 
     if !output.status.success() {
