@@ -1,7 +1,10 @@
+mod utils;
+
 use anyhow::{Ok, Result};
 use clap::Parser;
 use indexmap::indexmap;
 
+use crate::utils::exit_with_error;
 use std::{collections::HashSet, process::Command};
 
 /// Small utils tools to update local git and compare the commits.
@@ -14,6 +17,9 @@ struct Cli {
 
 #[derive(Parser, Debug)]
 enum SubCommand {
+    /// Version of the tool.
+    Version,
+
     /// Run `git fetch --all --prune --tags`
     /// and `git pull` on each branch.
     Update(Update),
@@ -41,11 +47,6 @@ struct DiffMessage {
     /// For example: `ginsp diff-message master develop -c "fix,feat"`
     #[clap(short = 'c', long, num_args = 1)]
     pick_contains: Option<String>,
-}
-
-fn exit_with_error(error: &str) {
-    eprintln!("{}", error);
-    std::process::exit(1);
 }
 
 fn get_commits_info(branch: &str) -> Result<Vec<String>> {
@@ -265,36 +266,43 @@ fn command_diff(diff_options: &DiffMessage) -> Result<()> {
         }
     }
 
-    println!("Commit messages unique on {}:", source_branch);
-    println!("------------------------");
-    for (hash, message) in unique_to_source.iter() {
-        println!(
-            "{:>3} {} - {}",
-            {
-                if picked_vec.contains(&hash) {
-                    "->"
-                } else {
-                    ""
-                }
-            },
-            &hash,
-            message
-        );
-    }
-
-    println!("\nCommit messages unique on {}:", target_branch);
-    println!("------------------------");
-    for (hash, message) in unique_to_target {
-        println!("{:>3} {} - {}", "", &hash, message);
-    }
+    print_result(source_branch, unique_to_source);
+    print_result(target_branch, unique_to_target);
 
     Ok(())
+}
+
+/// Print result as table like this
+/// ```
+/// Commit messages unique on branch:
+/// ------------------------
+///     eec4f1c - [ABC-10370] message
+///     54912eb - [ABC-10365] message
+/// ```
+fn print_result(branch: &str, unique_commits: Vec<(String, String)>) {
+    println!("\nCommit messages unique on {}:", branch);
+    println!("------------------------");
+    for (hash, message) in unique_commits {
+        // extract ticket number from commit message
+        let ticket_number = utils::extract_ticket_number(&message, r"^\[(\w+-\d+)]");
+
+        // get Jira ticket status with reqwest
+        let status: String = match ticket_number {
+            Some(ticket_number) => utils::get_jira_ticket_status(ticket_number),
+            None => "Fail to fetch".to_string(),
+        };
+
+        println!("{} - {} - {}", &hash, status, message);
+    }
 }
 
 fn main() -> Result<()> {
     let options = Cli::parse();
 
     match &options.subcommand {
+        SubCommand::Version => {
+            println!("ginsp version {}", env!("CARGO_PKG_VERSION"));
+        }
         SubCommand::Update(update) => {
             command_update(update.branches.clone())?;
         }
