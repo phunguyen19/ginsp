@@ -2,7 +2,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub enum ErrorKind {
+pub enum GinspError {
     #[error("Config error: {0}")]
     ConfigError(ConfigErrorKind),
 }
@@ -14,4 +14,6 @@ pub enum ConfigErrorKind {
     IOError(#[from] std::io::Error),
     #[error("TOML error: {0}")]
     TOMLError(#[from] toml::de::Error),
+    #[error("ENV error: {0}")]
+    ENVError(#[from] std::env::VarError),
 }
