@@ -1,0 +1,4 @@
+[project_management]
+name = "Jira"
+url = "https://jira.com"
+credential_env_var_name = "JIRA_CREDENTIAL"

@@ -50,6 +50,13 @@ pub fn get_jira_ticket_status(ticket_number: String) -> String {
     };
 }
 
+pub fn read_env(env_var_name: &str) -> Option<String> {
+    match std::env::var(env_var_name) {
+        Ok(value) => Some(value),
+        Err(_) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -76,6 +83,22 @@ mod tests {
             let expected = case[2];
             let ticket_number = extract_ticket_number(message, pattern);
             assert_eq!(ticket_number, Some(expected.to_string()));
+        }
+    }
+    
+    // Test read env read_env(env_var_name: &str) -> Option<String>
+    #[test]
+    fn test_read_env() {
+        let cases = vec![
+            vec!["TEST_ENV_VAR", "test_env_var_value"],
+            vec!["TEST_ENV_VAR_NOT_EXIST", ""],
+        ];
+
+        for case in cases {
+            let env_var_name = case[0];
+            let expected = case[1];
+            let env_var_value = read_env(env_var_name);
+            assert_eq!(env_var_value, Some(expected.to_string()));
         }
     }
 }
