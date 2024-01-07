@@ -1,5 +1,6 @@
 use regex::Regex;
 use std::process::Command;
+use crate::config::AuthType;
 
 pub fn exit_with_error(error: &str) {
     eprintln!("{}", error);
@@ -12,36 +13,37 @@ pub fn extract_ticket_number(message: &str, pattern: &str) -> Option<String> {
     caps.map(|caps| caps[1].to_string())
 }
 
-// TODO: handle error, should return Result
-pub fn get_jira_ticket_status(url: String) -> String {
+// TODO: handle error
+pub fn get_jira_ticket_status(url: String, auth_type: &Option<AuthType>, auth_string: Option<String>) -> String {
     let client = reqwest::blocking::Client::new();
-    let res = client
-        .get(url)
-        .basic_auth("email", Some("key"))
-        .header("Accept", "application/json")
-        // TODO: handle error
-        .send()
-        .unwrap();
+    let mut builder = client.get(url.as_str()).header("Accept", "application/json");
+
+    builder = match auth_type {
+        Some(AuthType::Basic) => {
+            let auth_string = auth_string.unwrap_or_default();
+            let (username, password) = auth_string.split_at(auth_string.find(':').unwrap_or_default());
+            builder.basic_auth(username, Some(&password[1..]))
+        },
+        Some(AuthType::Bearer) => {
+            builder.bearer_auth(auth_string.unwrap_or_default())
+        },
+        None => builder,
+    };
+
+    let res = builder.send().unwrap();
 
     let status = res.status();
 
     return match status {
         reqwest::StatusCode::OK => {
-            // parse ticket status fields.status.name from res body
-            // TODO: handle error
-            let body = res.text().unwrap();
-            // TODO: handle error
-            let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-            // TODO: handle error
-            let fields = json["fields"].as_object().unwrap();
-            // TODO: handle error
-            let s = fields["status"]["name"].as_str().unwrap();
-
-            // TODO: handle error, should return Result
+            let body = res.text().unwrap(); // TODO: handle error
+            let json: serde_json::Value = serde_json::from_str(&body).unwrap(); // TODO: handle error
+            let fields = json["fields"].as_object().unwrap(); // TODO: handle error
+            let s = fields["status"]["name"].as_str().unwrap(); // TODO: handle error
             s.to_string()
         }
         _ => {
-            // TODO: handle error, should return Result
+            // TODO: handle error
             format!("Error: {}", status)
         }
     };

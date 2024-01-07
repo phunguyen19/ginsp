@@ -1,5 +1,6 @@
 [project_management]
 name = "Jira"
-url = "https://jira.com"
+url = "https://jira.com/:ticket_id"
+auth_type = "Basic"
 credential_env_var_name = "JIRA_CREDENTIAL"
 ticket_id_regex = '^(\w+-\d+)'
