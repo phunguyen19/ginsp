@@ -13,11 +13,7 @@ pub fn extract_ticket_number(message: &str, pattern: &str) -> Option<String> {
 }
 
 // TODO: handle error, should return Result
-pub fn get_jira_ticket_status(ticket_number: String) -> String {
-    let url = format!(
-        "https://inspectorio.atlassian.net/rest/api/3/issue/{}",
-        ticket_number
-    );
+pub fn get_jira_ticket_status(url: String) -> String {
     let client = reqwest::blocking::Client::new();
     let res = client
         .get(url)

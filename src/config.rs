@@ -15,7 +15,7 @@ struct ProjectManagement {
 }
 
 #[derive(Debug, Deserialize)]
-enum ProjectManagementName {
+pub enum ProjectManagementName {
     Jira,
 }
 

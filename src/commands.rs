@@ -1,9 +1,9 @@
+use crate::utils;
 use crate::utils::{checkout_branch, exit_with_error, fetch_all, get_commits_info, pull_branch};
 use clap::Parser;
 use indexmap::indexmap;
 use std::collections::HashSet;
 use std::process::Command;
-use crate::utils;
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -63,15 +63,20 @@ pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
     anyhow::Ok(())
 }
 
+pub struct DiffResult {
+    pub source_branch: String,
+    pub unique_to_source: Vec<CommitInfo>,
+    pub target_branch: String,
+    pub unique_to_target: Vec<CommitInfo>,
+}
+
 pub struct CommitInfo {
     pub hash: String,
     pub message: String,
     pub status: Option<String>,
 }
 
-pub fn command_diff(
-    diff_options: &DiffMessage,
-) -> anyhow::Result<(String, Vec<CommitInfo>, String, Vec<CommitInfo>)> {
+pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
     let source_branch = &diff_options.branches[0];
     let target_branch = &diff_options.branches[1];
 
@@ -225,11 +230,11 @@ pub fn command_diff(
 
                 // get Jira ticket status with reqwest
                 match ticket_number {
-                    Some(ticket_number) => Some(utils::get_jira_ticket_status(ticket_number)),
-                    None => Some("Fail to fetch".to_string())
+                    Some(ticket_number) => Some(utils::get_jira_ticket_status(format!("https://inspectorio.atlassian.net/rest/api/3/issue/{}", ticket_number))),
+                    None => Some("Fail to fetch".to_string()),
                 }
             } else {
-                Some("".to_string())
+                None
             },
         })
         .collect::<Vec<_>>();
@@ -246,19 +251,19 @@ pub fn command_diff(
 
                 // get Jira ticket status with reqwest
                 match ticket_number {
-                    Some(ticket_number) => Some(utils::get_jira_ticket_status(ticket_number)),
-                    None => Some("Fail to fetch".to_string())
+                    Some(ticket_number) => Some(utils::get_jira_ticket_status(format!("https://inspectorio.atlassian.net/rest/api/3/issue/{}", ticket_number))),
+                    None => Some("Fail to fetch".to_string()),
                 }
             } else {
-                Some("".to_string())
+                None
             },
         })
         .collect::<Vec<_>>();
 
-    Ok((
-        source_branch.to_owned(),
+    Ok(DiffResult {
+        source_branch: source_branch.to_string(),
         unique_to_source,
-        target_branch.to_owned(),
+        target_branch: target_branch.to_string(),
         unique_to_target,
-    ))
+    })
 }
