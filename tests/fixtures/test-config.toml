@@ -2,3 +2,4 @@
 name = "Jira"
 url = "https://jira.com"
 credential_env_var_name = "JIRA_CREDENTIAL"
+ticket_id_regex = '^(\w+-\d+)'

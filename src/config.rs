@@ -2,7 +2,7 @@ use crate::error::{ConfigErrorKind, ErrorKind};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-struct Config {
+pub struct Config {
     project_management: Option<ProjectManagement>,
 }
 
@@ -11,6 +11,7 @@ struct ProjectManagement {
     name: ProjectManagementName,
     url: String,
     credential_env_var_name: String,
+    ticket_id_regex: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +26,6 @@ impl Config {
         Ok(config)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
