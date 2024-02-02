@@ -44,14 +44,19 @@ pub struct DiffMessage {
     /// Cherry pick commits that contains the given string.
     /// Multiple strings can be separated by comma.
     /// For example: `ginsp diff-message master develop -c "fix,feat"`
-    #[clap(short = 'c', long, num_args = 1)]
+    #[clap(short = 'p', long = "pick-contains", num_args = 1)]
     pub pick_contains: Option<String>,
 
     /// Fetching ticket status from project management tool
     /// and print it in the result table. This option requires a config file.
     /// For example: `ginsp diff-message master develop -p`
-    #[clap(short = 'p', long, default_value = "false")]
+    #[clap(short = 't', long = "ticket-status", default_value = "false")]
     pub print_ticket_status: bool,
+
+    /// Config file path.
+    /// For example: `ginsp diff-message master develop -c "fix,feat" -p -f ginsp.toml`
+    #[clap(short = 'c', long = "config-file")]
+    pub config_file: Option<String>,
 }
 
 pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
@@ -219,8 +224,9 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
     }
 
     // TODO: better pattern to load the config
-    let project_management: Option<ProjectManagement> = if diff_options.print_ticket_status {
-        let config = Config::read_toml_file("ginsp.toml")?;
+    let project_management: Option<ProjectManagement> = if diff_options.print_ticket_status && diff_options.config_file.is_some() {
+        let config_file_path = diff_options.config_file.as_ref().unwrap();
+        let config = Config::read_toml_file(config_file_path.as_str())?;
         config.project_management
     } else {
         None
