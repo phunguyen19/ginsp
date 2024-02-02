@@ -42,11 +42,11 @@ impl Config {
                 match std::env::var(env_var_name) {
                     Ok(auth_string) => {
                         project_management.auth_string = Some(auth_string);
-                    },
-                    Err(_) => {}, // TODO: error handling
+                    }
+                    Err(_) => {} // TODO: error handling
                 };
             }
-            None => {},
+            None => {}
         };
 
         // return config

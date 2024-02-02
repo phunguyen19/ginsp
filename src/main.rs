@@ -8,7 +8,6 @@ use anyhow::{Ok, Result};
 use clap::Parser;
 
 use crate::commands::{command_diff, command_update};
-use crate::utils::exit_with_error;
 use crate::view::print_result;
 
 fn main() -> Result<()> {
