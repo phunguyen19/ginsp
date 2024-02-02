@@ -1,10 +1,10 @@
+use crate::config::{Config, ProjectManagement, ProjectManagementName};
 use crate::utils;
 use crate::utils::{checkout_branch, exit_with_error, fetch_all, get_commits_info, pull_branch};
 use clap::Parser;
 use indexmap::indexmap;
 use std::collections::HashSet;
 use std::process::Command;
-use crate::config::{Config, ProjectManagement, ProjectManagementName};
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -224,13 +224,14 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
     }
 
     // TODO: better pattern to load the config
-    let project_management: Option<ProjectManagement> = if diff_options.print_ticket_status && diff_options.config_file.is_some() {
-        let config_file_path = diff_options.config_file.as_ref().unwrap();
-        let config = Config::read_toml_file(config_file_path.as_str())?;
-        config.project_management
-    } else {
-        None
-    };
+    let project_management: Option<ProjectManagement> =
+        if diff_options.print_ticket_status && diff_options.config_file.is_some() {
+            let config_file_path = diff_options.config_file.as_ref().unwrap();
+            let config = Config::read_toml_file(config_file_path.as_str())?;
+            config.project_management
+        } else {
+            None
+        };
 
     // convert unique_to_source to Vec<CommitInfo>
     let unique_to_source = unique_to_source
@@ -245,16 +246,25 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
                 let project_management = project_management.as_ref().unwrap();
 
                 // extract ticket number from commit message
-                let ticket_number = utils::extract_ticket_number(&message, project_management.ticket_id_regex.as_str());
+                let ticket_number = utils::extract_ticket_number(
+                    message,
+                    project_management.ticket_id_regex.as_str(),
+                );
 
                 // get Jira ticket status with reqwest
                 match ticket_number {
                     Some(ticket_number) => {
                         let url = match project_management.name {
-                            ProjectManagementName::Jira => project_management.url.replace(":ticket_id", &ticket_number),
+                            ProjectManagementName::Jira => {
+                                project_management.url.replace(":ticket_id", &ticket_number)
+                            }
                         };
-                        Some(utils::get_jira_ticket_status(url, &project_management.auth_type, project_management.get_auth_string()))
-                    },
+                        Some(utils::get_jira_ticket_status(
+                            url,
+                            &project_management.auth_type,
+                            project_management.get_auth_string(),
+                        ))
+                    }
                     None => Some("Fail to fetch".to_string()),
                 }
             } else {
@@ -275,16 +285,25 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
                 let project_management = project_management.as_ref().unwrap();
 
                 // extract ticket number from commit message
-                let ticket_number = utils::extract_ticket_number(&message, project_management.ticket_id_regex.as_str());
+                let ticket_number = utils::extract_ticket_number(
+                    message,
+                    project_management.ticket_id_regex.as_str(),
+                );
 
                 // get Jira ticket status with reqwest
                 match ticket_number {
                     Some(ticket_number) => {
                         let url = match project_management.name {
-                            ProjectManagementName::Jira => project_management.url.replace(":ticket_id", &ticket_number),
+                            ProjectManagementName::Jira => {
+                                project_management.url.replace(":ticket_id", &ticket_number)
+                            }
                         };
-                        Some(utils::get_jira_ticket_status(url, &project_management.auth_type, project_management.get_auth_string()))
-                    },
+                        Some(utils::get_jira_ticket_status(
+                            url,
+                            &project_management.auth_type,
+                            project_management.get_auth_string(),
+                        ))
+                    }
                     None => Some("Fail to fetch".to_string()),
                 }
             } else {

@@ -1,6 +1,6 @@
+use crate::config::AuthType;
 use regex::Regex;
 use std::process::Command;
-use crate::config::AuthType;
 
 pub fn exit_with_error(error: &str) {
     eprintln!("{}", error);
@@ -14,19 +14,24 @@ pub fn extract_ticket_number(message: &str, pattern: &str) -> Option<String> {
 }
 
 // TODO: handle error
-pub fn get_jira_ticket_status(url: String, auth_type: &Option<AuthType>, auth_string: Option<String>) -> String {
+pub fn get_jira_ticket_status(
+    url: String,
+    auth_type: &Option<AuthType>,
+    auth_string: Option<String>,
+) -> String {
     let client = reqwest::blocking::Client::new();
-    let mut builder = client.get(url.as_str()).header("Accept", "application/json");
+    let mut builder = client
+        .get(url.as_str())
+        .header("Accept", "application/json");
 
     builder = match auth_type {
         Some(AuthType::Basic) => {
             let auth_string = auth_string.unwrap_or_default();
-            let (username, password) = auth_string.split_at(auth_string.find(':').unwrap_or_default());
+            let (username, password) =
+                auth_string.split_at(auth_string.find(':').unwrap_or_default());
             builder.basic_auth(username, Some(&password[1..]))
-        },
-        Some(AuthType::Bearer) => {
-            builder.bearer_auth(auth_string.unwrap_or_default())
-        },
+        }
+        Some(AuthType::Bearer) => builder.bearer_auth(auth_string.unwrap_or_default()),
         None => builder,
     };
 
