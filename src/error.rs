@@ -5,6 +5,10 @@ use thiserror::Error;
 pub enum GinspError {
     #[error("Config error: {0}")]
     ConfigError(ConfigErrorKind),
+    #[error("Git error: {0}")]
+    GitError(String),
+    #[error("System error: {0}")]
+    SystemError(String),
 }
 
 #[derive(Debug, Error)]
