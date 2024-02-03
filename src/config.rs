@@ -30,21 +30,18 @@ pub enum ProjectManagementName {
 impl Config {
     pub fn read_toml_file(path: &str) -> anyhow::Result<Config, GinspError> {
         let toml = std::fs::read_to_string(path)
-            .map_err(|err| GinspError::ConfigError(ConfigErrorKind::IOError(err)))?;
+            .map_err(|err| GinspError::Config(ConfigErrorKind::IO(err)))?;
 
         let mut config: Config = toml::from_str(toml.as_str())
-            .map_err(|err| GinspError::ConfigError(ConfigErrorKind::TOMLError(err)))?;
+            .map_err(|err| GinspError::Config(ConfigErrorKind::Toml(err)))?;
 
         // read auth string from env var
         match &mut config.project_management {
             Some(project_management) => {
                 let env_var_name = project_management.credential_env_var_name.as_str();
-                match std::env::var(env_var_name) {
-                    Ok(auth_string) => {
-                        project_management.auth_string = Some(auth_string);
-                    }
-                    Err(_) => {} // TODO: error handling
-                };
+                if let Ok(auth_string) = std::env::var(env_var_name) {
+                    project_management.auth_string = Some(auth_string);
+                }
             }
             None => {}
         };
@@ -67,7 +64,7 @@ mod tests {
     #[test]
     fn test_read_toml_file_not_exist() {
         let config = Config::read_toml_file("tests/fixtures/test-config.not-exist.toml");
-        assert_eq!(config.is_err(), true);
+        assert!(config.is_err());
         assert!(config
             .unwrap_err()
             .to_string()
@@ -77,7 +74,7 @@ mod tests {
     #[test]
     fn test_wrong_toml_format() {
         let config = Config::read_toml_file("tests/fixtures/test-config.wrong-format.toml");
-        assert_eq!(config.is_err(), true);
+        assert!(config.is_err());
         assert!(config
             .unwrap_err()
             .to_string()
@@ -87,7 +84,7 @@ mod tests {
     #[test]
     fn test_read_toml_file() {
         let config = Config::read_toml_file("tests/fixtures/test-config.toml");
-        assert_eq!(config.is_ok(), true);
-        assert_eq!(config.unwrap().project_management.is_some(), true);
+        assert!(config.is_ok());
+        assert!(config.unwrap().project_management.is_some());
     }
 }

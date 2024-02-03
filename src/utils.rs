@@ -126,12 +126,12 @@ pub fn validate_git() -> anyhow::Result<(), GinspError> {
     let output = Command::new("git")
         .arg("--version")
         .output()
-        .map_err(|err| GinspError::SystemError(err.to_string()))?;
+        .map_err(|err| GinspError::System(err.to_string()))?;
 
     if !output.status.success() {
-        let err = String::from_utf8(output.stderr)
-            .map_err(|err| GinspError::SystemError(err.to_string()))?;
-        Err(GinspError::GitError(err))
+        let err =
+            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
+        Err(GinspError::Git(err))
     } else {
         Ok(())
     }
@@ -142,12 +142,12 @@ pub fn validate_git_repo() -> anyhow::Result<(), GinspError> {
     let output = Command::new("git")
         .arg("status")
         .output()
-        .map_err(|err| GinspError::SystemError(err.to_string()))?;
+        .map_err(|err| GinspError::System(err.to_string()))?;
 
     if !output.status.success() {
-        let err = String::from_utf8(output.stderr)
-            .map_err(|err| GinspError::SystemError(err.to_string()))?;
-        Err(GinspError::GitError(err))
+        let err =
+            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
+        Err(GinspError::Git(err))
     } else {
         Ok(())
     }
