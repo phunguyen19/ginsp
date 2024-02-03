@@ -24,6 +24,7 @@ Copy this content to the `.git/hooks/pre-commit` file.
 
 set -eu
 
+echo "Running cargo fmt..."
 if ! cargo fmt -- --check
 then
     echo "There are some code style issues."
@@ -31,9 +32,12 @@ then
     exit 1
 fi
 
+echo "Running cargo clippy..."
 if ! cargo clippy --all-targets -- -D warnings
 then
     echo "There are some clippy issues."
     exit 1
 fi
+
+exit 0
 ```
