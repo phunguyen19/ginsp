@@ -8,19 +8,22 @@ use anyhow::{Ok, Result};
 use clap::Parser;
 
 use crate::commands::{command_diff, command_update};
-use crate::utils::{exit_with_error, validate_git, validate_git_repo};
+use crate::utils::{validate_git, validate_git_repo};
 use crate::view::print_result;
 
 fn main() -> Result<()> {
-    if let Err(err) = validate_git() {
-        exit_with_error(&format!("{}", err));
-    }
-
-    if let Err(err) = validate_git_repo() {
-        exit_with_error(&format!("{}", err));
-    }
-
     let options = commands::Cli::parse();
+
+    // run validate git for certain commands
+    match &options.subcommand {
+        // skip these commands
+        commands::SubCommand::Version => {}
+        // run for the rest
+        _ => {
+            validate_git()?;
+            validate_git_repo()?;
+        }
+    };
 
     match &options.subcommand {
         commands::SubCommand::Version => {
