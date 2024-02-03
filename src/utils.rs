@@ -1,4 +1,5 @@
 use crate::config::AuthType;
+use crate::error::GinspError;
 use regex::Regex;
 use std::process::Command;
 
@@ -118,6 +119,38 @@ pub fn pull_branch(branch: &str) -> anyhow::Result<()> {
     }
     println!("{}", String::from_utf8(output.stdout)?);
     anyhow::Ok(())
+}
+
+/// Validate if git is installed
+pub fn validate_git() -> anyhow::Result<(), GinspError> {
+    let output = Command::new("git")
+        .arg("--version")
+        .output()
+        .map_err(|err| GinspError::System(err.to_string()))?;
+
+    if !output.status.success() {
+        let err =
+            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
+        Err(GinspError::Git(err))
+    } else {
+        Ok(())
+    }
+}
+
+/// Validate if the current repo has git
+pub fn validate_git_repo() -> anyhow::Result<(), GinspError> {
+    let output = Command::new("git")
+        .arg("status")
+        .output()
+        .map_err(|err| GinspError::System(err.to_string()))?;
+
+    if !output.status.success() {
+        let err =
+            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
+        Err(GinspError::Git(err))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
