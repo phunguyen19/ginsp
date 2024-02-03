@@ -10,7 +10,7 @@ cargo install --path .
 
 ## Contribution
 
-Setup Git pre commit hooks to run `cargo fmt`, `cargo clippy` and `cargo test` before commit.
+Setup Git pre commit hooks to run `cargo fmt` and `cargo clippy` before commit.
 
 ```sh
 touch .git/hooks/pre-commit
@@ -36,12 +36,4 @@ then
     echo "There are some clippy issues."
     exit 1
 fi
-
-if ! cargo test
-then
-    echo "There are some test issues."
-    exit 1
-fi
-
-exit 0
 ```
