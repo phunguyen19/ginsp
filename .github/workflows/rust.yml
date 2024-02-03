@@ -1,8 +1,6 @@
 name: Rust
 
 on:
-  push:
-    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
@@ -10,23 +8,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  Lint:
-
+  Lint-and-Test:
     runs-on: ubuntu-latest
-
+    needs: check
     steps:
     - uses: actions/checkout@v3
     - name: Format and Lint
       run: cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings
-
-  Test:
-
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Format and Lint
-        run: cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings
-      - name: Tests
-        run: cargo test --verbose
-
+    - name: Tests
+      run: cargo test --verbose
