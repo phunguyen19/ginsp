@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod credentials;
 mod error;
 mod utils;
 mod view;
@@ -12,6 +13,10 @@ use crate::utils::{validate_git, validate_git_repo};
 use crate::view::print_result;
 
 fn main() -> Result<()> {
+    let cred = credentials::Credentials::read_credential_file()?;
+
+    println!("{:?}", cred.find_credential_value("INSPECTORIO_JIRA_TOKEN"));
+
     let options = commands::Cli::parse();
 
     // run validate git for certain commands
