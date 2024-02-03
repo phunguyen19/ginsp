@@ -153,22 +153,6 @@ pub fn validate_git_repo() -> anyhow::Result<(), GinspError> {
     }
 }
 
-/// Execute a command and validate its success
-pub fn execute_and_validate(cmd: &str, arg: &str) -> anyhow::Result<(), GinspError> {
-    let output = Command::new(cmd)
-        .arg(arg)
-        .output()
-        .map_err(|err| GinspError::SystemError(err.to_string()))?;
-
-    if !output.status.success() {
-        let err = String::from_utf8(output.stderr)
-            .map_err(|err| GinspError::SystemError(err.to_string()))?;
-        Err(GinspError::GitError(err))
-    } else {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
