@@ -1,5 +1,5 @@
 use crate::config::profile::{Profile, ProjectManagement, ProjectManagementName};
-use crate::lib;
+use crate::service;
 use crate::utils::{exit_with_error};
 use crate::{config, utils};
 
@@ -73,23 +73,23 @@ pub fn command_version() -> anyhow::Result<()> {
 }
 
 pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
-    lib::git::Git::validate_git_installed()?;
-    lib::git::Git::validate_git_repo()?;
+    service::git::Git::validate_git_installed()?;
+    service::git::Git::validate_git_repo()?;
 
-    let output = lib::git::Git::fetch_all()?;
+    let output = service::git::Git::fetch_all()?;
     println!("{}", String::from_utf8(output.stdout)?);
 
     for branch in branches.iter() {
-        lib::git::Git::checkout_branch(branch)?;
-        lib::git::Git::pull_branch()?;
+        service::git::Git::checkout_branch(branch)?;
+        service::git::Git::pull_branch()?;
     }
 
     anyhow::Ok(())
 }
 
 pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
-    lib::git::Git::validate_git_installed()?;
-    lib::git::Git::validate_git_repo()?;
+    service::git::Git::validate_git_installed()?;
+    service::git::Git::validate_git_repo()?;
 
     config::Config::read_config_file();
 
@@ -211,7 +211,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                                 project_management.url.replace(":ticket_id", &ticket_number)
                             }
                         };
-                        Some(lib::jira::Jira::get_ticket_status(
+                        Some(service::jira::Jira::get_ticket_status(
                             url,
                             &project_management.auth_type,
                             project_management.get_auth_string(),
@@ -250,7 +250,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                                 project_management.url.replace(":ticket_id", &ticket_number)
                             }
                         };
-                        Some(lib::jira::Jira::get_ticket_status(
+                        Some(service::jira::Jira::get_ticket_status(
                             url,
                             &project_management.auth_type,
                             project_management.get_auth_string(),

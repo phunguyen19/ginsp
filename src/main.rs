@@ -1,7 +1,7 @@
 mod commands;
 mod config;
 mod error;
-mod lib;
+mod service;
 mod utils;
 
 use anyhow::{Ok, Result};
