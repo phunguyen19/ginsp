@@ -1,3 +1,4 @@
+
 use crate::config::{Config, ProjectManagement, ProjectManagementName};
 use crate::utils;
 use crate::utils::{checkout_branch, exit_with_error, fetch_all, get_commits_info, pull_branch};
@@ -5,6 +6,7 @@ use clap::Parser;
 use indexmap::indexmap;
 use std::collections::HashSet;
 use std::process::Command;
+use crate::view::print_result;
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -59,6 +61,17 @@ pub struct DiffMessage {
     pub config_file: Option<String>,
 }
 
+pub struct CommitInfo {
+    pub hash: String,
+    pub message: String,
+    pub status: Option<String>,
+}
+
+pub fn command_version() -> anyhow::Result<()> {
+    println!("ginsp version {}", env!("CARGO_PKG_VERSION"));
+    anyhow::Ok(())
+}
+
 pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
     fetch_all()?;
     for branch in branches.iter() {
@@ -69,20 +82,7 @@ pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
     anyhow::Ok(())
 }
 
-pub struct DiffResult {
-    pub source_branch: String,
-    pub unique_to_source: Vec<CommitInfo>,
-    pub target_branch: String,
-    pub unique_to_target: Vec<CommitInfo>,
-}
-
-pub struct CommitInfo {
-    pub hash: String,
-    pub message: String,
-    pub status: Option<String>,
-}
-
-pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
+pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
     let source_branch = &diff_options.branches[0];
     let target_branch = &diff_options.branches[1];
 
@@ -312,10 +312,8 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<DiffResult> {
         })
         .collect::<Vec<_>>();
 
-    Ok(DiffResult {
-        source_branch: source_branch.to_string(),
-        unique_to_source,
-        target_branch: target_branch.to_string(),
-        unique_to_target,
-    })
+    print_result(&source_branch, unique_to_source);
+    print_result(&target_branch, unique_to_target);
+
+    Ok(())
 }
