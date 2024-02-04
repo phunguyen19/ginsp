@@ -102,9 +102,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
     let unique_to_source = unique_by_message(&source_map, &target_map);
     let unique_to_target = unique_by_message(&target_map, &source_map);
 
-    let is_cherry_pick = diff_options.pick_contains.is_some();
-
-    if is_cherry_pick {
+    if diff_options.pick_contains.is_some() {
         println!(
             "Cherry picking {}...",
             diff_options.pick_contains.as_ref().unwrap()
