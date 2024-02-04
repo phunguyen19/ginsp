@@ -1,7 +1,8 @@
 mod commands;
-mod error;
-mod utils;
 mod config;
+mod error;
+mod lib;
+mod utils;
 
 use anyhow::{Ok, Result};
 use clap::Parser;

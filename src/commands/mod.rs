@@ -1,12 +1,12 @@
-
 use crate::config::profile::{Profile, ProjectManagement, ProjectManagementName};
+use crate::lib;
+use crate::utils::{exit_with_error, get_commits_info};
 use crate::{config, utils};
-use crate::utils::{checkout_branch, exit_with_error, fetch_all, get_commits_info, pull_branch};
+
+use crate::error::GinspError;
 use clap::Parser;
 use indexmap::indexmap;
-use std::collections::HashSet;
 use std::process::Command;
-use crate::error::GinspError;
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -73,22 +73,23 @@ pub fn command_version() -> anyhow::Result<()> {
 }
 
 pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
-    validate_git_installed()?;
-    validate_git_repo()?;
+    lib::git::Git::validate_git_installed()?;
+    lib::git::Git::validate_git_repo()?;
 
-    fetch_all()?;
+    let output = lib::git::Git::fetch_all()?;
+    println!("{}", String::from_utf8(output.stdout)?);
+
     for branch in branches.iter() {
-        println!("Updating branch '{}'", branch);
-        checkout_branch(branch)?;
-        pull_branch(branch)?;
+        lib::git::Git::checkout_branch(branch)?;
+        lib::git::Git::pull_branch()?;
     }
 
     anyhow::Ok(())
 }
 
 pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
-    validate_git_installed()?;
-    validate_git_repo()?;
+    lib::git::Git::validate_git_installed()?;
+    lib::git::Git::validate_git_repo()?;
 
     config::Config::read_config_file();
 
@@ -99,10 +100,10 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
     let target_map = load_commits_as_map(target_branch)?;
 
     let unique_to_source = unique_by_message(&source_map, &target_map);
-    let unique_to_target =  unique_by_message(&target_map, &source_map);
+    let unique_to_target = unique_by_message(&target_map, &source_map);
 
     let is_cherry_pick = diff_options.pick_contains.is_some();
-    
+
     if is_cherry_pick {
         println!(
             "Cherry picking {}...",
@@ -269,38 +270,6 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Validate if git is installed
-fn validate_git_installed() -> anyhow::Result<(), GinspError> {
-    let output = Command::new("git")
-        .arg("--version")
-        .output()
-        .map_err(|err| GinspError::System(err.to_string()))?;
-
-    if !output.status.success() {
-        let err =
-            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
-        Err(GinspError::Git(err))
-    } else {
-        Ok(())
-    }
-}
-
-/// Validate if the current repo has git
-fn validate_git_repo() -> anyhow::Result<(), GinspError> {
-    let output = Command::new("git")
-        .arg("status")
-        .output()
-        .map_err(|err| GinspError::System(err.to_string()))?;
-
-    if !output.status.success() {
-        let err =
-            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
-        Err(GinspError::Git(err))
-    } else {
-        Ok(())
-    }
-}
-
 fn load_commits_as_map(branch: &str) -> anyhow::Result<indexmap::IndexMap<String, String>> {
     let commits = get_commits_info(branch)?;
     let mut map = indexmap!();
@@ -323,9 +292,11 @@ fn load_commits_as_map(branch: &str) -> anyhow::Result<indexmap::IndexMap<String
     Ok(map)
 }
 
-fn unique_by_message(from: &indexmap::IndexMap<String, String>, to: &indexmap::IndexMap<String, String>) -> Vec<(String, String)> {
-    from
-        .iter()
+fn unique_by_message(
+    from: &indexmap::IndexMap<String, String>,
+    to: &indexmap::IndexMap<String, String>,
+) -> Vec<(String, String)> {
+    from.iter()
         .filter(|(message, _)| !to.contains_key(*message))
         .map(|(message, hash)| (hash.to_string(), message.to_string()))
         .collect::<Vec<_>>()
