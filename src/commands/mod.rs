@@ -1,12 +1,12 @@
 use crate::config::profile::{Profile, ProjectManagement, ProjectManagementName};
 use crate::lib;
-use crate::utils::{exit_with_error, get_commits_info};
+use crate::utils::{exit_with_error};
 use crate::{config, utils};
 
-use crate::error::GinspError;
 use clap::Parser;
 use indexmap::indexmap;
 use std::process::Command;
+use regex::Regex;
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -198,7 +198,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                 let project_management = project_management.as_ref().unwrap();
 
                 // extract ticket number from commit message
-                let ticket_number = utils::extract_ticket_number(
+                let ticket_number = extract_ticket_number(
                     message,
                     project_management.ticket_id_regex.as_str(),
                 );
@@ -211,7 +211,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                                 project_management.url.replace(":ticket_id", &ticket_number)
                             }
                         };
-                        Some(utils::get_jira_ticket_status(
+                        Some(lib::jira::Jira::get_ticket_status(
                             url,
                             &project_management.auth_type,
                             project_management.get_auth_string(),
@@ -237,7 +237,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                 let project_management = project_management.as_ref().unwrap();
 
                 // extract ticket number from commit message
-                let ticket_number = utils::extract_ticket_number(
+                let ticket_number = extract_ticket_number(
                     message,
                     project_management.ticket_id_regex.as_str(),
                 );
@@ -250,7 +250,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                                 project_management.url.replace(":ticket_id", &ticket_number)
                             }
                         };
-                        Some(utils::get_jira_ticket_status(
+                        Some(lib::jira::Jira::get_ticket_status(
                             url,
                             &project_management.auth_type,
                             project_management.get_auth_string(),
@@ -292,6 +292,31 @@ fn load_commits_as_map(branch: &str) -> anyhow::Result<indexmap::IndexMap<String
     Ok(map)
 }
 
+fn get_commits_info(branch: &str) -> anyhow::Result<Vec<String>> {
+    let command = format!("git log --format=%h%s --abbrev=7 {}", branch);
+    let output = Command::new("sh").arg("-c").arg(command).output()?;
+
+    if !output.status.success() {
+        exit_with_error(&format!(
+            "Fail to get commits info for branch '{}'. Error: {}",
+            branch,
+            String::from_utf8(output.stderr)?
+        ));
+    }
+
+    let commit_info = String::from_utf8(output.stdout)?;
+    let result = commit_info
+        .trim()
+        .split('\n')
+        .map(|commit| {
+            let (hash, message) = commit.split_at(7);
+            format!("{}::{}", hash, message)
+        })
+        .collect();
+
+    anyhow::Ok(result)
+}
+
 fn unique_by_message(
     from: &indexmap::IndexMap<String, String>,
     to: &indexmap::IndexMap<String, String>,
@@ -315,6 +340,12 @@ fn get_last_commit_hash() -> anyhow::Result<String> {
     }
 
     Ok(String::from_utf8(output.stdout)?.trim().to_string())
+}
+
+fn extract_ticket_number(message: &str, pattern: &str) -> Option<String> {
+    let re = Regex::new(pattern).expect("Invalid ticket regex pattern");
+    let caps = re.captures(message);
+    caps.map(|caps| caps[1].to_string())
 }
 
 /// Print result as table like this
