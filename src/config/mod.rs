@@ -8,22 +8,19 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct ProjectManagement {
-    pub name: ProjectManagementName,
+    pub provider: ProjectManagementProvider,
     pub url: String,
-    pub credential_env_var_name: String,
+    pub credential_key: String,
     pub ticket_id_regex: String,
-    pub auth_type: Option<AuthType>,
-    auth_string: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub enum AuthType {
     Basic,
-    Bearer,
 }
 
 #[derive(Debug, Deserialize)]
-pub enum ProjectManagementName {
+pub enum ProjectManagementProvider {
     Jira,
 }
 
@@ -32,28 +29,26 @@ impl Config {
         let toml = std::fs::read_to_string(path)
             .map_err(|err| GinspError::Config(ConfigErrorKind::IO(err)))?;
 
-        let mut config: Config = toml::from_str(toml.as_str())
-            .map_err(|err| GinspError::Config(ConfigErrorKind::Toml(err)))?;
+        let config: Config = toml::from_str(toml.as_str())
+            .map_err(|err| GinspError::Config(ConfigErrorKind::Syntax(err)))?;
 
-        // read auth string from env var
-        match &mut config.project_management {
-            Some(project_management) => {
-                let env_var_name = project_management.credential_env_var_name.as_str();
-                if let Ok(auth_string) = std::env::var(env_var_name) {
-                    project_management.auth_string = Some(auth_string);
-                }
-            }
-            None => {}
-        };
-
-        // return config
         Ok(config)
     }
-}
 
-impl ProjectManagement {
-    pub fn get_auth_string(&self) -> Option<String> {
-        self.auth_string.to_owned()
+    pub fn read_config_file_from_home_dir() -> anyhow::Result<Config, GinspError> {
+        let path_buf = home::home_dir().ok_or(GinspError::Config(ConfigErrorKind::IO(
+            std::io::Error::new(std::io::ErrorKind::NotFound, "Home directory not found"),
+        )))?;
+
+        let homedir = path_buf
+            .to_str()
+            .ok_or(GinspError::Config(ConfigErrorKind::IO(
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Home directory not found"),
+            )))?;
+
+        let file_path = format!("{}/.ginsp/config.toml", homedir);
+
+        Self::read_toml_file(file_path.as_str())
     }
 }
 
@@ -78,13 +73,12 @@ mod tests {
         assert!(config
             .unwrap_err()
             .to_string()
-            .starts_with("Config error: TOML error: "));
+            .starts_with("Config error: Syntax error:"));
     }
 
     #[test]
     fn test_read_toml_file() {
         let config = Config::read_toml_file("tests/fixtures/test-config.toml");
         assert!(config.is_ok());
-        assert!(config.unwrap().project_management.is_some());
     }
 }
