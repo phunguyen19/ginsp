@@ -47,14 +47,14 @@ pub struct DiffMessage {
     /// Cherry pick commits that contains the given string.
     /// Multiple strings can be separated by comma.
     /// For example: `ginsp diff-message master develop -c "fix,feat"`
-    #[clap(short = 'p', long = "pick-contains", num_args = 1)]
+    #[clap(short = 'c', long = "cherry-picks", num_args = 1)]
     pub pick_contains: Option<String>,
 
     /// Fetching ticket status from project management tool
     /// and print it in the result table. This option requires a config file.
     /// For example: `ginsp diff-message master develop -p`
     #[clap(short = 't', long = "ticket-status", default_value = "false")]
-    pub print_ticket_status: bool,
+    pub is_fetch_ticket_status: bool,
 }
 
 pub struct CommitInfo {
@@ -183,7 +183,8 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
         .map(|(hash, message)| CommitInfo {
             hash: hash.to_string(),
             message: message.to_string(),
-            status: if profile.project_management.is_none() {
+            status: if !diff_options.is_fetch_ticket_status || profile.project_management.is_none()
+            {
                 None
             } else {
                 let project_management = profile.project_management.as_ref().unwrap();
@@ -207,7 +208,8 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
         .map(|(hash, message)| CommitInfo {
             hash: hash.to_string(),
             message: message.to_string(),
-            status: if profile.project_management.is_none() {
+            status: if !diff_options.is_fetch_ticket_status || profile.project_management.is_none()
+            {
                 None
             } else {
                 let project_management = profile.project_management.as_ref().unwrap();

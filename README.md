@@ -8,7 +8,15 @@ This project is under development and is not ready for use.
 cargo install --path .
 ```
 
+## Usage
+
+```sh
+ginsp --help
+````
+
 ## Contribution
+
+### Setup
 
 Setup Git pre commit hooks to run `cargo fmt` and `cargo clippy` before commit.
 
@@ -40,4 +48,16 @@ then
 fi
 
 exit 0
+```
+
+### Test
+
+```sh
+cargo test
+```
+
+with coverage (install [tarpualin](https://github.com/xd009642/tarpaulin) first)
+
+```sh
+cargo tarpaulin
 ```
