@@ -192,10 +192,10 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
                 let ticket_number =
                     extract_ticket_number(message, project_management.ticket_id_regex.as_str());
 
-                if ticket_number.is_none() {
-                    None
+                if let Some(ticket_number) = ticket_number {
+                    get_ticket_status(ticket_number.as_ref(), project_management).ok()
                 } else {
-                    get_ticket_status(ticket_number.as_ref().unwrap(), project_management).ok()
+                    None
                 }
             },
         })
@@ -216,10 +216,10 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
                 let ticket_number =
                     extract_ticket_number(message, project_management.ticket_id_regex.as_str());
 
-                if ticket_number.is_none() {
-                    None
+                if let Some(ticket_number) = ticket_number {
+                    get_ticket_status(ticket_number.as_ref(), project_management).ok()
                 } else {
-                    get_ticket_status(ticket_number.as_ref().unwrap(), project_management).ok()
+                    None
                 }
             },
         })
