@@ -1,45 +1,39 @@
-use crate::config::profile::AuthType;
+use crate::error::GinspError;
 
 pub struct Jira {}
 
 impl Jira {
     pub fn get_ticket_status(
         url: String,
-        auth_type: &Option<AuthType>,
-        auth_string: Option<String>,
-    ) -> String {
+        username: String,
+        password: String,
+    ) -> Result<String, GinspError> {
         let client = reqwest::blocking::Client::new();
-        let mut builder = client
+
+        let res = client
             .get(url.as_str())
-            .header("Accept", "application/json");
-
-        builder = match auth_type {
-            Some(AuthType::Basic) => {
-                let auth_string = auth_string.unwrap_or_default();
-                let (username, password) =
-                    auth_string.split_at(auth_string.find(':').unwrap_or_default());
-                builder.basic_auth(username, Some(&password[1..]))
-            }
-            Some(AuthType::Bearer) => builder.bearer_auth(auth_string.unwrap_or_default()),
-            None => builder,
-        };
-
-        let res = builder.send().unwrap();
+            .header("Accept", "application/json")
+            .basic_auth(username, Some(password))
+            .send()
+            .map_err(|err| GinspError::Http(err.to_string()))?;
 
         let status = res.status();
 
-        return match status {
-            reqwest::StatusCode::OK => {
-                let body = res.text().unwrap(); // TODO: handle error
-                let json: serde_json::Value = serde_json::from_str(&body).unwrap(); // TODO: handle error
-                let fields = json["fields"].as_object().unwrap(); // TODO: handle error
-                let s = fields["status"]["name"].as_str().unwrap(); // TODO: handle error
-                s.to_string()
-            }
-            _ => {
-                // TODO: handle error
-                format!("Error: {}", status)
-            }
-        };
+        if let reqwest::StatusCode::OK = status {
+            let body = res
+                .text()
+                .map_err(|err| GinspError::System(err.to_string()))?;
+            let json: serde_json::Value =
+                serde_json::from_str(&body).map_err(|err| GinspError::System(err.to_string()))?;
+            let fields = json["fields"]
+                .as_object()
+                .ok_or(GinspError::Http("Error: fields not found".to_string()))?;
+            let s = fields["status"]["name"]
+                .as_str()
+                .ok_or(GinspError::Http("Error: status not found".to_string()))?;
+            Ok(s.to_string())
+        } else {
+            Err(GinspError::Http(format!("Error: {}", status)))
+        }
     }
 }

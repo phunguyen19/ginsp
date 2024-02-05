@@ -1,12 +1,13 @@
-use crate::config::profile::{Profile, ProjectManagement, ProjectManagementName};
+use crate::config;
+use crate::config::{ProjectManagement, ProjectManagementProvider};
 use crate::service;
-use crate::utils::{exit_with_error};
-use crate::{config, utils};
+use crate::utils::exit_with_error;
 
+use crate::error::{ConfigErrorKind, GinspError};
 use clap::Parser;
 use indexmap::indexmap;
-use std::process::Command;
 use regex::Regex;
+use std::process::Command;
 
 /// Small utils tools to update local git and compare the commits.
 #[derive(Parser, Debug)]
@@ -54,11 +55,6 @@ pub struct DiffMessage {
     /// For example: `ginsp diff-message master develop -p`
     #[clap(short = 't', long = "ticket-status", default_value = "false")]
     pub print_ticket_status: bool,
-
-    /// Config file path.
-    /// For example: `ginsp diff-message master develop -c "fix,feat" -p -f ginsp.toml`
-    #[clap(short = 'c', long = "config-file")]
-    pub config_file: Option<String>,
 }
 
 pub struct CommitInfo {
@@ -87,11 +83,9 @@ pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
     anyhow::Ok(())
 }
 
-pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
+pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError> {
     service::git::Git::validate_git_installed()?;
     service::git::Git::validate_git_repo()?;
-
-    config::Config::read_config_file();
 
     let source_branch = &diff_options.branches[0];
     let target_branch = &diff_options.branches[1];
@@ -129,7 +123,11 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                 }
 
                 println!("Cherry picking {} - {}", hash, message);
-                let output = Command::new("git").arg("cherry-pick").arg(hash).output()?;
+                let output = Command::new("git")
+                    .arg("cherry-pick")
+                    .arg(hash)
+                    .output()
+                    .map_err(|err| GinspError::Git(err.to_string()))?;
                 if output.status.success() {
                     continue 'outer;
                 }
@@ -141,10 +139,12 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                 let output = Command::new("git")
                     .arg("cherry-pick")
                     .arg("--abort")
-                    .output()?;
+                    .output()
+                    .map_err(|err| GinspError::Git(err.to_string()))?;
 
                 if !output.status.success() {
-                    let err = String::from_utf8(output.stderr)?;
+                    let err = String::from_utf8(output.stderr)
+                        .map_err(|err| GinspError::System(err.to_string()))?;
                     exit_with_error(&format!(
                         "Fail to abort cherry pick commit '{}'. Error: {}",
                         hash, err
@@ -156,13 +156,15 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
                     .arg("reset")
                     .arg("--hard")
                     .arg(&last_commit_hash)
-                    .output()?;
+                    .output()
+                    .map_err(|err| GinspError::Git(err.to_string()))?;
 
                 if !output.status.success() {
                     exit_with_error(&format!(
                         "Fail to reset to commit hash {}. Error: {}",
                         last_commit_hash,
-                        String::from_utf8(output.stderr)?
+                        String::from_utf8(output.stderr)
+                            .map_err(|err| GinspError::System(err.to_string()))?
                     ));
                 }
 
@@ -174,51 +176,27 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
         }
     }
 
-    // TODO: better pattern to load the config
-    let project_management: Option<ProjectManagement> =
-        if diff_options.print_ticket_status && diff_options.config_file.is_some() {
-            let config_file_path = diff_options.config_file.as_ref().unwrap();
-            let config = Profile::read_toml_file(config_file_path.as_str())?;
-            config.project_management
-        } else {
-            None
-        };
+    let profile = config::Config::read_config_file_from_home_dir()?;
 
-    // convert unique_to_source to Vec<CommitInfo>
     let unique_to_source = unique_to_source
         .iter()
         .map(|(hash, message)| CommitInfo {
             hash: hash.to_string(),
             message: message.to_string(),
-
-            // TODO: better pattern
-            status: if project_management.is_some() {
-                let project_management = project_management.as_ref().unwrap();
+            status: if profile.project_management.is_none() {
+                None
+            } else {
+                let project_management = profile.project_management.as_ref().unwrap();
 
                 // extract ticket number from commit message
-                let ticket_number = extract_ticket_number(
-                    message,
-                    project_management.ticket_id_regex.as_str(),
-                );
+                let ticket_number =
+                    extract_ticket_number(message, project_management.ticket_id_regex.as_str());
 
-                // get Jira ticket status with reqwest
-                match ticket_number {
-                    Some(ticket_number) => {
-                        let url = match project_management.name {
-                            ProjectManagementName::Jira => {
-                                project_management.url.replace(":ticket_id", &ticket_number)
-                            }
-                        };
-                        Some(service::jira::Jira::get_ticket_status(
-                            url,
-                            &project_management.auth_type,
-                            project_management.get_auth_string(),
-                        ))
-                    }
-                    None => Some("Fail to fetch".to_string()),
+                if ticket_number.is_none() {
+                    None
+                } else {
+                    get_ticket_status(ticket_number.as_ref().unwrap(), project_management).ok()
                 }
-            } else {
-                None
             },
         })
         .collect::<Vec<_>>();
@@ -229,48 +207,43 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<()> {
         .map(|(hash, message)| CommitInfo {
             hash: hash.to_string(),
             message: message.to_string(),
-
-            // TODO: better pattern
-            status: if project_management.is_some() {
-                let project_management = project_management.as_ref().unwrap();
+            status: if profile.project_management.is_none() {
+                None
+            } else {
+                let project_management = profile.project_management.as_ref().unwrap();
 
                 // extract ticket number from commit message
-                let ticket_number = extract_ticket_number(
-                    message,
-                    project_management.ticket_id_regex.as_str(),
-                );
+                let ticket_number =
+                    extract_ticket_number(message, project_management.ticket_id_regex.as_str());
 
-                // get Jira ticket status with reqwest
-                match ticket_number {
-                    Some(ticket_number) => {
-                        let url = match project_management.name {
-                            ProjectManagementName::Jira => {
-                                project_management.url.replace(":ticket_id", &ticket_number)
-                            }
-                        };
-                        Some(service::jira::Jira::get_ticket_status(
-                            url,
-                            &project_management.auth_type,
-                            project_management.get_auth_string(),
-                        ))
-                    }
-                    None => Some("Fail to fetch".to_string()),
+                if ticket_number.is_none() {
+                    None
+                } else {
+                    get_ticket_status(ticket_number.as_ref().unwrap(), project_management).ok()
                 }
-            } else {
-                None
             },
         })
         .collect::<Vec<_>>();
 
-    print_result(&source_branch, unique_to_source);
-    print_result(&target_branch, unique_to_target);
+    print_result(source_branch, unique_to_source);
+    print_result(target_branch, unique_to_target);
+    println!();
 
     Ok(())
 }
 
-fn load_commits_as_map(branch: &str) -> anyhow::Result<indexmap::IndexMap<String, String>> {
-    let commits = get_commits_info(branch)?;
+fn load_commits_as_map(
+    branch: &str,
+) -> anyhow::Result<indexmap::IndexMap<String, String>, GinspError> {
+    let commits = get_commits_info(branch).map_err(|err| {
+        GinspError::Git(format!(
+            "Fail to get commits info for branch '{}'. Error: {}",
+            branch, err
+        ))
+    })?;
+
     let mut map = indexmap!();
+
     for commit in commits.iter() {
         let (hash, message) = match commit.split_once("::") {
             Some((hash, message)) => (hash, message),
@@ -287,6 +260,7 @@ fn load_commits_as_map(branch: &str) -> anyhow::Result<indexmap::IndexMap<String
 
         map.insert(message.trim().to_string(), hash.trim().to_string());
     }
+
     Ok(map)
 }
 
@@ -325,25 +299,54 @@ fn unique_by_message(
         .collect::<Vec<_>>()
 }
 
-fn get_last_commit_hash() -> anyhow::Result<String> {
+fn get_last_commit_hash() -> anyhow::Result<String, GinspError> {
     let output = Command::new("git")
         .arg("log")
         .arg("-1")
         .arg("--pretty=%h")
-        .output()?;
+        .output()
+        .map_err(|err| GinspError::Git(err.to_string()))?;
 
     if !output.status.success() {
-        let err = String::from_utf8(output.stderr)?;
+        let err =
+            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
         exit_with_error(&format!("Fail to get last commit hash. Error: {}", err));
     }
 
-    Ok(String::from_utf8(output.stdout)?.trim().to_string())
+    Ok(String::from_utf8(output.stdout)
+        .map_err(|err| GinspError::System(err.to_string()))?
+        .trim()
+        .to_string())
 }
 
 fn extract_ticket_number(message: &str, pattern: &str) -> Option<String> {
     let re = Regex::new(pattern).expect("Invalid ticket regex pattern");
     let caps = re.captures(message);
     caps.map(|caps| caps[1].to_string())
+}
+
+fn get_ticket_status(
+    ticket_number: &str,
+    project_management: &ProjectManagement,
+) -> Result<String, GinspError> {
+    let split_at = project_management
+        .credential_key
+        .find(':')
+        .ok_or(GinspError::Config(ConfigErrorKind::InvalidCredentialKey))?;
+
+    let url = match project_management.provider {
+        ProjectManagementProvider::Jira => {
+            project_management.url.replace(":ticket_id", ticket_number)
+        }
+    };
+
+    let (username, password) = project_management.credential_key.split_at(split_at);
+
+    let status =
+        service::jira::Jira::get_ticket_status(url, username.to_string(), password.to_string())
+            .map_err(|err| GinspError::Http(err.to_string()))?;
+
+    Ok(status)
 }
 
 /// Print result as table like this

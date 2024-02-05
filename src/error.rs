@@ -7,6 +7,8 @@ pub enum GinspError {
     Config(ConfigErrorKind),
     #[error("Git error: {0}")]
     Git(String),
+    #[error("Jira error: {0}")]
+    Http(String),
     #[error("System error: {0}")]
     System(String),
 }
@@ -18,4 +20,6 @@ pub enum ConfigErrorKind {
     IO(#[from] std::io::Error),
     #[error("Syntax error: {0}")]
     Syntax(#[from] toml::de::Error),
+    #[error("InvalidCredentialKey")]
+    InvalidCredentialKey,
 }
