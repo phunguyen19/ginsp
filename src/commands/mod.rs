@@ -234,9 +234,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
     Ok(())
 }
 
-fn load_commits_as_map(
-    branch: &str,
-) -> anyhow::Result<indexmap::IndexMap<String, String>, GinspError> {
+fn load_commits_as_map(branch: &str) -> Result<indexmap::IndexMap<String, String>, GinspError> {
     let commits = get_commits_info(branch).map_err(|err| {
         GinspError::Git(format!(
             "Fail to get commits info for branch '{}'. Error: {}",
@@ -253,11 +251,11 @@ fn load_commits_as_map(
         };
 
         if hash.is_empty() || message.is_empty() {
-            exit_with_error(&format!(
+            return Err(GinspError::Git(format!(
                 "Fail to parse commit info '{}' of branch {}",
                 commit.as_str(),
                 branch
-            ));
+            )));
         }
 
         map.insert(message.trim().to_string(), hash.trim().to_string());
@@ -266,19 +264,22 @@ fn load_commits_as_map(
     Ok(map)
 }
 
-fn get_commits_info(branch: &str) -> anyhow::Result<Vec<String>> {
+fn get_commits_info(branch: &str) -> Result<Vec<String>, GinspError> {
     let command = format!("git log --format=%h%s --abbrev=7 {}", branch);
-    let output = Command::new("sh").arg("-c").arg(command).output()?;
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .map_err(|err| GinspError::Git(err.to_string()))?;
 
     if !output.status.success() {
-        exit_with_error(&format!(
-            "Fail to get commits info for branch '{}'. Error: {}",
-            branch,
-            String::from_utf8(output.stderr)?
-        ));
+        let err =
+            String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
+        return Err(GinspError::Git(err));
     }
 
-    let commit_info = String::from_utf8(output.stdout)?;
+    let commit_info =
+        String::from_utf8(output.stdout).map_err(|err| GinspError::System(err.to_string()))?;
     let result = commit_info
         .trim()
         .split('\n')
@@ -288,7 +289,7 @@ fn get_commits_info(branch: &str) -> anyhow::Result<Vec<String>> {
         })
         .collect();
 
-    anyhow::Ok(result)
+    Ok(result)
 }
 
 fn unique_by_message(
@@ -312,7 +313,7 @@ fn get_last_commit_hash() -> anyhow::Result<String, GinspError> {
     if !output.status.success() {
         let err =
             String::from_utf8(output.stderr).map_err(|err| GinspError::System(err.to_string()))?;
-        exit_with_error(&format!("Fail to get last commit hash. Error: {}", err));
+        return Err(GinspError::Git(err));
     }
 
     Ok(String::from_utf8(output.stdout)
