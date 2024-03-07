@@ -10,9 +10,19 @@ cargo install --path .
 
 ## Usage
 
+Commands
 ```sh
 ginsp --help
 ````
+
+Project project management configured sample with Jira
+```toml
+[project_management]
+provider = "Jira"
+url = "https://my-org.atlassian.net/rest/api/3/issue/:ticket_id"
+credential_key = "<email>:<key>"
+ticket_id_regex = '(\w+-\d+)'
+```
 
 ## Contribution
 
