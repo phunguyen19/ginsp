@@ -20,6 +20,20 @@ cargo install --path .
 Commands
 ```sh
 ginsp --help
+
+# Update local branches to update to date with remote branches
+ginsp update master release-v1.223.0
+
+# Compare two branches by diffing their commit messages
+ginsp diff-message master release-v1.223.0 
+
+# Compare two branches by diffing their commit messages
+# and get the tickets status from project management system configured in ~/.ginsp/config.toml
+ginsp diff-message master release-v1.223.0 -t
+
+# Compare two branches by diffing their commit messages
+# and pick the commits that contains the specified tickets (separator by comma)
+ginsp diff-message master release-v1.223.0 -c TICKET-1,TICKET-2,TICKET-3
 ````
 
 Project management configured sample with Jira
