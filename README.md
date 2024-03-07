@@ -71,3 +71,7 @@ with coverage (install [tarpualin](https://github.com/xd009642/tarpaulin) first)
 ```sh
 cargo tarpaulin
 ```
+
+## License
+
+MIT
