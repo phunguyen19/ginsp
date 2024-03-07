@@ -1,6 +1,8 @@
-# GINSP
+# Ginsp
 
-This project is under development and is not ready for use.
+Ginsp is a tool that supports git workflow to picking commits from a branch to another branch with integrated project management system.
+
+WARNING: This tool is still in development and there many more management systems to be integrated.
 
 ## Installation
 
