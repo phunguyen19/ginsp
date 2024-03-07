@@ -5,25 +5,60 @@ on:
       - "[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
-  release:
-    name: release ${{ matrix.target }}
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-pc-windows-gnu
-            archive: zip
-          - target: x86_64-unknown-linux-musl
-            archive: tar.gz tar.xz tar.zst
-          - target: x86_64-apple-darwin
-            archive: zip
+
     steps:
-      - uses: actions/checkout@master
-      - name: Compile and release
-        uses: rust-build/rust-build.action@v1.4.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
         with:
-          RUSTTARGET: ${{ matrix.target }}
-          ARCHIVE_TYPES: ${{ matrix.archive }}
+          rust-version: stable
+
+      - name: Build for Linux
+        run: cargo build --release
+
+      - name: Archive Linux build
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux
+          path: target/release/
+
+  release:
+    runs-on: macos-latest
+
+    needs: build
+
+    steps:
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: stable
+
+      - name: Build for macOS
+        run: cargo build --release
+
+      - name: Archive macOS build
+        uses: actions/upload-artifact@v2
+        with:
+          name: macos
+          path: target/release/
+
+  windows:
+    runs-on: windows-latest
+
+    needs: build
+
+    steps:
+      - name: Set up Rust
+        uses: actions/setup-rust@v1
+        with:
+          rust-version: stable
+
+      - name: Build for Windows
+        run: cargo build --release
+
+      - name: Archive Windows build
+        uses: actions/upload-artifact@v2
+        with:
+          name: windows
+          path: target/release/
