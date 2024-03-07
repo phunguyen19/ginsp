@@ -2,8 +2,15 @@
 
 This project is under development and is not ready for use.
 
-## Install from source locally
+## Installation
 
+From release artifact (replace `<version>` with the latest release version)
+```sh
+# MacOS
+curl -sSL  https://github.com/phunguyen19/ginsp/releases/download/<version>/ginsp-x86_64-apple-darwin.tar.gz | tar -xz && sudo mv ginsp /usr/local/bin/ && rm -f ginsp-x86_64-apple-darwin.tar.gz
+```
+
+From source
 ```sh
 cargo install --path .
 ```
@@ -15,8 +22,10 @@ Commands
 ginsp --help
 ````
 
-Project project management configured sample with Jira
+Project management configured sample with Jira
 ```toml
+# ~/.ginsp/config.toml
+
 [project_management]
 provider = "Jira"
 url = "https://my-org.atlassian.net/rest/api/3/issue/:ticket_id"
