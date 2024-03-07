@@ -72,12 +72,8 @@ pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
     service::git::Git::validate_git_installed()?;
     service::git::Git::validate_git_repo()?;
 
-    service::git::Git::fetch_all().map_err(|err| {
-        GinspError::Git(format!(
-            "Fail to fetch all branches. Error: {}",
-            err
-        ))
-    })?;
+    service::git::Git::fetch_all()
+        .map_err(|err| GinspError::Git(format!("Fail to fetch all branches. Error: {}", err)))?;
 
     for branch in branches.iter() {
         service::git::Git::checkout_branch(branch)?;
