@@ -16,10 +16,10 @@ pub enum GinspError {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum ConfigErrorKind {
-    #[error("IO error: {0}")]
+    #[error("Unable to read config file: IO error: {0}")]
     IO(#[from] std::io::Error),
-    #[error("Syntax error: {0}")]
+    #[error("Unable to read config file: Syntax error: {0}")]
     Syntax(#[from] toml::de::Error),
-    #[error("InvalidCredentialKey")]
+    #[error("Invalid credential key")]
     InvalidCredentialKey,
 }

@@ -22,6 +22,9 @@ fn main() -> Result<()> {
         commands::SubCommand::DiffMessage(diff_cmd) => {
             command_diff(diff_cmd)?;
         }
+        commands::SubCommand::Diagnostic => {
+            commands::command_diagnostic()?;
+        }
     }
 
     Ok(())
