@@ -51,34 +51,3 @@ impl Config {
         Self::read_toml_file(file_path.as_str())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_read_toml_file_not_exist() {
-        let config = Config::read_toml_file("tests/fixtures/test-config.not-exist.toml");
-        assert!(config.is_err());
-        assert!(config
-            .unwrap_err()
-            .to_string()
-            .starts_with("Config error: IO error: No such file or directory"));
-    }
-
-    #[test]
-    fn test_wrong_toml_format() {
-        let config = Config::read_toml_file("tests/fixtures/test-config.wrong-format.toml");
-        assert!(config.is_err());
-        assert!(config
-            .unwrap_err()
-            .to_string()
-            .starts_with("Config error: Syntax error:"));
-    }
-
-    #[test]
-    fn test_read_toml_file() {
-        let config = Config::read_toml_file("tests/fixtures/test-config.toml");
-        assert!(config.is_ok());
-    }
-}

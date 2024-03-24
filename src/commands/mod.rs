@@ -1,5 +1,4 @@
-use crate::config;
-use crate::config::{ProjectManagement, ProjectManagementProvider};
+use crate::config::{Config, ProjectManagement, ProjectManagementProvider};
 use crate::service;
 use crate::utils::exit_with_error;
 
@@ -20,14 +19,21 @@ pub struct Cli {
 #[derive(Parser, Debug)]
 pub enum SubCommand {
     /// Version of the tool.
+    #[clap(name = "version", alias = "v")]
     Version,
 
     /// Run `git fetch --all --prune --tags`
     /// and `git pull` on each branch.
+    #[clap(name = "update", alias = "u")]
     Update(Update),
 
     /// Compare two branches by commit messages.
-    DiffMessage(DiffMessage),
+    #[clap(name = "diff-message", alias = "dm")]
+    DiffMessage(DiffMessageParams),
+
+    /// Diagnostic command to check if the tool is working.
+    #[clap(name = "diagnostic", alias = "dia")]
+    Diagnostic,
 }
 
 #[derive(Parser, Debug)]
@@ -39,7 +45,7 @@ pub struct Update {
 }
 
 #[derive(Parser, Debug)]
-pub struct DiffMessage {
+pub struct DiffMessageParams {
     /// Two branches to compare.
     #[clap(name = "branches", required = true)]
     pub branches: Vec<String>,
@@ -63,6 +69,17 @@ pub struct CommitInfo {
     pub status: Option<String>,
 }
 
+pub struct RawCommitInfo(String, String);
+impl From<&RawCommitInfo> for CommitInfo {
+    fn from(raw_commit: &RawCommitInfo) -> Self {
+        CommitInfo {
+            hash: raw_commit.0.to_string(),
+            message: raw_commit.1.to_string(),
+            status: None,
+        }
+    }
+}
+
 pub fn command_version() -> anyhow::Result<()> {
     println!("ginsp version {}", env!("CARGO_PKG_VERSION"));
     anyhow::Ok(())
@@ -83,7 +100,7 @@ pub fn command_update(branches: Vec<String>) -> anyhow::Result<()> {
     anyhow::Ok(())
 }
 
-pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError> {
+pub fn command_diff(diff_options: &DiffMessageParams) -> anyhow::Result<(), GinspError> {
     service::git::Git::validate_git_installed()?;
     service::git::Git::validate_git_repo()?;
 
@@ -113,7 +130,7 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
         let last_commit_hash = get_last_commit_hash()?;
 
         // for each unique commit on source branch, if in the cherry pick list, cherry pick it to target branch
-        'outer: for (hash, message) in unique_to_source.iter().rev() {
+        'outer: for RawCommitInfo(hash, message) in unique_to_source.iter().rev() {
             // for each cherry pick commit message
             // if the cherry pick commit message is a substring of the source commit message
             // cherry pick the source commit to target branch
@@ -176,62 +193,58 @@ pub fn command_diff(diff_options: &DiffMessage) -> anyhow::Result<(), GinspError
         }
     }
 
-    let profile = config::Config::read_config_file_from_home_dir()?;
-
-    let unique_to_source = unique_to_source
+    let mut unique_to_source = unique_to_source
         .iter()
-        .map(|(hash, message)| CommitInfo {
-            hash: hash.to_string(),
-            message: message.to_string(),
-            status: if !diff_options.is_fetch_ticket_status || profile.project_management.is_none()
-            {
-                None
-            } else {
-                let project_management = profile.project_management.as_ref().unwrap();
-
-                // extract ticket number from commit message
-                let ticket_number =
-                    extract_ticket_number(message, project_management.ticket_id_regex.as_str());
-
-                if let Some(ticket_number) = ticket_number {
-                    get_ticket_status(ticket_number.as_ref(), project_management).ok()
-                } else {
-                    None
-                }
-            },
-        })
+        .map(CommitInfo::from)
         .collect::<Vec<_>>();
 
     // convert unique_to_target to Vec<CommitInfo>
-    let unique_to_target = unique_to_target
+    let mut unique_to_target = unique_to_target
         .iter()
-        .map(|(hash, message)| CommitInfo {
-            hash: hash.to_string(),
-            message: message.to_string(),
-            status: if !diff_options.is_fetch_ticket_status || profile.project_management.is_none()
-            {
-                None
-            } else {
-                let project_management = profile.project_management.as_ref().unwrap();
-
-                // extract ticket number from commit message
-                let ticket_number =
-                    extract_ticket_number(message, project_management.ticket_id_regex.as_str());
-
-                if let Some(ticket_number) = ticket_number {
-                    get_ticket_status(ticket_number.as_ref(), project_management).ok()
-                } else {
-                    None
-                }
-            },
-        })
+        .map(CommitInfo::from)
         .collect::<Vec<_>>();
+
+    if diff_options.is_fetch_ticket_status {
+        let profile = Config::read_config_file_from_home_dir()?;
+        unique_to_source = map_ticket_status(unique_to_source, &profile);
+        unique_to_target = map_ticket_status(unique_to_target, &profile);
+    }
 
     print_result(source_branch, unique_to_source);
     print_result(target_branch, unique_to_target);
     println!();
 
     Ok(())
+}
+
+pub fn command_diagnostic() -> anyhow::Result<()> {
+    service::git::Git::validate_git_installed()?;
+    service::git::Git::validate_git_repo()?;
+    let _ = Config::read_config_file_from_home_dir()?;
+    // TODO: diagnostic for project management tool
+    println!("Diagnostic passed.");
+    Ok(())
+}
+
+fn map_ticket_status(commits: Vec<CommitInfo>, profile: &Config) -> Vec<CommitInfo> {
+    commits
+        .iter()
+        .map(|commit| {
+            let project_management = profile.project_management.as_ref().unwrap();
+            let ticket_number =
+                extract_ticket_number(&commit.message, project_management.ticket_id_regex.as_str());
+            CommitInfo {
+                hash: commit.hash.to_string(),
+                message: commit.message.to_string(),
+                status: match ticket_number {
+                    Some(ticket_number) => {
+                        get_ticket_status(&ticket_number, project_management).ok()
+                    }
+                    None => None,
+                },
+            }
+        })
+        .collect::<Vec<_>>()
 }
 
 fn load_commits_as_map(branch: &str) -> Result<indexmap::IndexMap<String, String>, GinspError> {
@@ -295,10 +308,10 @@ fn get_commits_info(branch: &str) -> Result<Vec<String>, GinspError> {
 fn unique_by_message(
     from: &indexmap::IndexMap<String, String>,
     to: &indexmap::IndexMap<String, String>,
-) -> Vec<(String, String)> {
+) -> Vec<RawCommitInfo> {
     from.iter()
         .filter(|(message, _)| !to.contains_key(*message))
-        .map(|(message, hash)| (hash.to_string(), message.to_string()))
+        .map(|(message, hash)| RawCommitInfo(hash.to_string(), message.to_string()))
         .collect::<Vec<_>>()
 }
 
