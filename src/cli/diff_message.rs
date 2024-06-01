@@ -40,26 +40,26 @@ impl CommandHandler for DiffMessage {
         service::git::Git::validate_git_repo()?;
 
         // Get and validate command line options
-        let diff_options = match cli.subcommand {
+        let options = match cli.subcommand {
             cli::SubCommand::DiffMessage(ref diff_cmd) => diff_cmd,
             _ => return Err(GinspError::Cli("Invalid subcommand".to_string()).into()),
         };
 
         // Get and validate branches
         let [source_branch, target_branch] = {
-            if diff_options.branches.len() != 2 {
+            if options.branches.len() != 2 {
                 let err_msg = "Provide 2 branches to compare".to_string();
                 return Err(GinspError::Cli(err_msg).into());
             }
-            [&diff_options.branches[0], &diff_options.branches[1]]
+            [&options.branches[0], &options.branches[1]]
         };
 
-        let is_cherry_pick = diff_options.pick_contains.is_some();
+        let is_cherry_pick = options.pick_contains.is_some();
 
         // validate current branch is the target branch (branches[1])
         if is_cherry_pick {
             let current_branch = service::git::Git::get_current_branch()?;
-            if current_branch != diff_options.branches[1] {
+            if current_branch != options.branches[1] {
                 return Err(GinspError::Cli(format!(
                     "Checkout to the target branch '{}' to use cherry-pick option.",
                     target_branch
@@ -68,7 +68,7 @@ impl CommandHandler for DiffMessage {
             }
         }
 
-        let cherry_pick_messages = match diff_options
+        let cherry_pick_messages = match options
             .pick_contains
             .as_ref()
             .map(|s| s.split(',').collect::<Vec<_>>())
@@ -94,10 +94,10 @@ impl CommandHandler for DiffMessage {
             .map(CommitInfo::from)
             .collect::<Vec<_>>();
 
-        if diff_options.is_fetch_ticket_status {
+        if options.is_fetch_ticket_status {
             let profile = Config::read_config_file_from_home_dir()?;
-            unique_to_source = map_ticket_status(unique_to_source, &profile);
-            unique_to_target = map_ticket_status(unique_to_target, &profile);
+            unique_to_source = map_ticket_status(unique_to_source, &profile, options.verbose);
+            unique_to_target = map_ticket_status(unique_to_target, &profile, options.verbose);
         }
 
         if is_cherry_pick && !unique_to_source.is_empty() {
@@ -111,7 +111,10 @@ impl CommandHandler for DiffMessage {
                         continue 'contain_msg_loop;
                     }
 
-                    println!("Doing cherry-pick {} {}", hash, message);
+                    if options.verbose {
+                        println!("Doing cherry-pick {} {}", hash, message);
+                    }
+
                     match service::git::Git::cherry_pick(hash) {
                         Ok(_) => {
                             commit.is_picked = true;
@@ -162,18 +165,26 @@ impl CommandHandler for DiffMessage {
     }
 }
 
-fn map_ticket_status(commits: Vec<CommitInfo>, profile: &Config) -> Vec<CommitInfo> {
+fn map_ticket_status(
+    commits: Vec<CommitInfo>,
+    profile: &Config,
+    is_verbose: bool,
+) -> Vec<CommitInfo> {
     commits
         .iter()
         .map(|commit| {
             let project_management = profile.project_management.as_ref().unwrap();
             let ticket_number =
                 extract_ticket_number(&commit.message, project_management.ticket_id_regex.as_str());
+
             CommitInfo {
                 hash: commit.hash.to_string(),
                 message: commit.message.to_string(),
                 status: match ticket_number {
                     Some(ticket_number) => {
+                        if is_verbose {
+                            println!("Fetching ticket status for {}", ticket_number);
+                        }
                         get_ticket_status(&ticket_number, project_management).ok()
                     }
                     None => None,

@@ -58,6 +58,9 @@ pub struct DiffMessageParams {
     /// For example: `ginsp diff-message master develop -p`
     #[clap(short = 't', long = "ticket-status", default_value = "false")]
     pub is_fetch_ticket_status: bool,
+
+    #[clap(short, long, default_value = "false")]
+    pub verbose: bool,
 }
 
 impl Cli {
