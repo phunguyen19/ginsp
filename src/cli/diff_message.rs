@@ -1,7 +1,6 @@
 use crate::cli::{Cli, CommandHandler};
 use crate::config::{Config, ProjectManagement, ProjectManagementProvider};
 use crate::error::{ConfigErrorKind, GinspError};
-use crate::utils::exit_with_error;
 use crate::{cli, service};
 use indexmap::indexmap;
 use regex::Regex;
@@ -13,6 +12,7 @@ pub struct CommitInfo {
     pub hash: String,
     pub message: String,
     pub status: Option<String>,
+    pub is_picked: bool,
 }
 
 pub struct RawCommitInfo(String, String);
@@ -22,6 +22,7 @@ impl From<&RawCommitInfo> for CommitInfo {
             hash: raw_commit.0.to_string(),
             message: raw_commit.1.to_string(),
             status: None,
+            is_picked: false,
         }
     }
 }
@@ -67,91 +68,20 @@ impl CommandHandler for DiffMessage {
             }
         }
 
+        let cherry_pick_messages = match diff_options
+            .pick_contains
+            .as_ref()
+            .map(|s| s.split(',').collect::<Vec<_>>())
+        {
+            Some(pick_contains) => pick_contains,
+            None => vec![],
+        };
+
         let source_map = load_commits_as_map(source_branch)?;
         let target_map = load_commits_as_map(target_branch)?;
 
         let unique_to_source = unique_by_message(&source_map, &target_map);
         let unique_to_target = unique_by_message(&target_map, &source_map);
-
-        if is_cherry_pick {
-            println!(
-                "Cherry picking {}...",
-                diff_options.pick_contains.as_ref().unwrap()
-            );
-
-            // Parse cherry-pick substrings
-            let cherry_pick_messages = diff_options
-                .pick_contains
-                .as_ref()
-                .map(|s| s.split(',').collect::<Vec<_>>())
-                .unwrap_or_default();
-
-            // This is used to reset to last commit hash if cherry-pick fails
-            let last_commit_hash = get_last_commit_hash()?;
-
-            // for each unique commit on source branch, if in the cherry-pick list, cherry-pick it to target branch
-            'outer: for RawCommitInfo(hash, message) in unique_to_source.iter().rev() {
-                // for each cherry-pick commit message
-                // if the cherry-pick commit message is a substring of the source commit message
-                // cherry-pick the source commit to target branch
-                'inner: for cherry_pick_message in cherry_pick_messages.iter() {
-                    if !message.contains(cherry_pick_message) {
-                        continue 'inner;
-                    }
-
-                    println!("Cherry picking {} - {}", hash, message);
-                    let output = Command::new("git")
-                        .arg("cherry-pick")
-                        .arg(hash)
-                        .output()
-                        .map_err(|err| GinspError::Git(err.to_string()))?;
-                    if output.status.success() {
-                        continue 'outer;
-                    }
-
-                    println!("Fail to cherry-pick commit {} - {}", hash, message);
-
-                    // cherry-pick abort
-                    println!("Abort cherry-pick...");
-                    let output = Command::new("git")
-                        .arg("cherry-pick")
-                        .arg("--abort")
-                        .output()
-                        .map_err(|err| GinspError::Git(err.to_string()))?;
-
-                    if !output.status.success() {
-                        let err = String::from_utf8(output.stderr)
-                            .map_err(|err| GinspError::System(err.to_string()))?;
-                        exit_with_error(&format!(
-                            "Fail to abort cherry-pick commit '{}'. Error: {}",
-                            hash, err
-                        ));
-                    }
-                    // reset to last commit hash
-                    println!("Reset to commit hash {}...", last_commit_hash);
-                    let output = Command::new("git")
-                        .arg("reset")
-                        .arg("--hard")
-                        .arg(&last_commit_hash)
-                        .output()
-                        .map_err(|err| GinspError::Git(err.to_string()))?;
-
-                    if !output.status.success() {
-                        exit_with_error(&format!(
-                            "Fail to reset to commit hash {}. Error: {}",
-                            last_commit_hash,
-                            String::from_utf8(output.stderr)
-                                .map_err(|err| GinspError::System(err.to_string()))?
-                        ));
-                    }
-
-                    exit_with_error(&format!(
-                        "Error: Fail to cherry-pick commit {} - {}",
-                        hash, message
-                    ));
-                }
-            }
-        }
 
         let mut unique_to_source = unique_to_source
             .iter()
@@ -168,6 +98,60 @@ impl CommandHandler for DiffMessage {
             let profile = Config::read_config_file_from_home_dir()?;
             unique_to_source = map_ticket_status(unique_to_source, &profile);
             unique_to_target = map_ticket_status(unique_to_target, &profile);
+        }
+
+        if is_cherry_pick && !unique_to_source.is_empty() {
+            let last_commit_hash = get_last_commit_hash()?;
+
+            'commit_loop: for commit in unique_to_source.iter_mut().rev() {
+                let CommitInfo { hash, message, .. } = commit;
+
+                'contain_msg_loop: for cherry_pick_message in cherry_pick_messages.iter() {
+                    if !message.contains(cherry_pick_message) {
+                        continue 'contain_msg_loop;
+                    }
+
+                    println!("Doing cherry-pick {} {}", hash, message);
+                    match service::git::Git::cherry_pick(hash) {
+                        Ok(_) => {
+                            commit.is_picked = true;
+                            continue 'commit_loop;
+                        }
+                        Err(_) => {
+                            eprintln!("Fail to cherry-pick commit. Resetting current branch to the last commit hash {}...", last_commit_hash);
+
+                            eprintln!("Aborting cherry-pick...");
+                            service::git::Git::cherry_pick_abort()
+                                .map(service::git::Git::print_std)
+                                .map_err(|err| {
+                                    GinspError::Git(format!(
+                                        "Fail to abort cherry-pick. Error: {}",
+                                        err
+                                    ))
+                                })?;
+
+                            eprintln!(
+                                "Resetting to commit hash {} (before doing cherry-pick)...",
+                                last_commit_hash
+                            );
+                            service::git::Git::reset_hard(&last_commit_hash)
+                                .map(service::git::Git::print_std)
+                                .map_err(|err| {
+                                    GinspError::Git(format!(
+                                        "Fail to reset to commit hash {}. Error: {}",
+                                        last_commit_hash, err
+                                    ))
+                                })?;
+
+                            return Err(GinspError::Git(format!(
+                                "Fail to cherry-pick commit {} {}",
+                                hash, message
+                            ))
+                            .into());
+                        }
+                    }
+                }
+            }
         }
 
         print_result(source_branch, unique_to_source);
@@ -194,6 +178,7 @@ fn map_ticket_status(commits: Vec<CommitInfo>, profile: &Config) -> Vec<CommitIn
                     }
                     None => None,
                 },
+                is_picked: commit.is_picked,
             }
         })
         .collect::<Vec<_>>()
@@ -327,24 +312,44 @@ fn get_ticket_status(
 fn print_result(branch: &str, commits: Vec<CommitInfo>) {
     println!("\nCommit messages unique on {}:", branch);
     println!("------------------------");
-    let len = commits.len();
+    let commits_len = commits.len();
+    let max_len_index = commits_len.to_string().len();
+    let max_status_len = commits
+        .iter()
+        .map(|commit| commit.status.as_ref().map_or(0, |s| s.len()))
+        .max()
+        .unwrap_or(0);
     for (index, item) in commits.into_iter().enumerate() {
         let CommitInfo {
             hash,
             message,
             status,
+            is_picked,
         } = item;
 
-        if status.is_none() {
-            println!("   {:>3} - {} - {}", len - index, hash, message);
+        let mut string_vec = vec![];
+
+        if is_picked {
+            string_vec.push("*".to_string());
         } else {
-            println!(
-                "   {:3} - {} - {} - {}",
-                len - index,
-                hash,
-                status.unwrap_or_default(),
-                message
-            );
+            string_vec.push(" ".to_string());
         }
+
+        string_vec.push(format!(
+            "{:width$}",
+            commits_len - index,
+            width = max_len_index
+        ));
+
+        if let Some(status) = status {
+            string_vec.push(format!("{:width$}", status, width = max_status_len));
+        } else {
+            string_vec.push(format!("{:width$}", "", width = max_status_len));
+        }
+
+        string_vec.push(hash);
+        string_vec.push(message);
+
+        println!("{}", string_vec.join(" "));
     }
 }
