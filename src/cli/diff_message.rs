@@ -34,16 +34,38 @@ impl DiffMessage {
 
 impl CommandHandler for DiffMessage {
     fn execute(&self, cli: &Cli) -> anyhow::Result<()> {
+        // validate git is installed and the current directory is a git repository
+        service::git::Git::validate_git_installed()?;
+        service::git::Git::validate_git_repo()?;
+
+        // Get and validate command line options
         let diff_options = match cli.subcommand {
             cli::SubCommand::DiffMessage(ref diff_cmd) => diff_cmd,
             _ => return Err(GinspError::Cli("Invalid subcommand".to_string()).into()),
         };
 
-        service::git::Git::validate_git_installed()?;
-        service::git::Git::validate_git_repo()?;
+        // Get and validate branches
+        let [source_branch, target_branch] = {
+            if diff_options.branches.len() != 2 {
+                let err_msg = "Provide 2 branches to compare".to_string();
+                return Err(GinspError::Cli(err_msg).into());
+            }
+            [&diff_options.branches[0], &diff_options.branches[1]]
+        };
 
-        let source_branch = &diff_options.branches[0];
-        let target_branch = &diff_options.branches[1];
+        let is_cherry_pick = diff_options.pick_contains.is_some();
+
+        // validate current branch is the target branch (branches[1])
+        if is_cherry_pick {
+            let current_branch = service::git::Git::get_current_branch()?;
+            if current_branch != diff_options.branches[1] {
+                return Err(GinspError::Cli(format!(
+                    "Checkout to the target branch '{}' to use cherry-pick option.",
+                    target_branch
+                ))
+                .into());
+            }
+        }
 
         let source_map = load_commits_as_map(source_branch)?;
         let target_map = load_commits_as_map(target_branch)?;
@@ -51,7 +73,7 @@ impl CommandHandler for DiffMessage {
         let unique_to_source = unique_by_message(&source_map, &target_map);
         let unique_to_target = unique_by_message(&target_map, &source_map);
 
-        if diff_options.pick_contains.is_some() {
+        if is_cherry_pick {
             println!(
                 "Cherry picking {}...",
                 diff_options.pick_contains.as_ref().unwrap()

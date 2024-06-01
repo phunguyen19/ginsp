@@ -24,6 +24,13 @@ impl Git {
         Self::run_git_command(&["pull"])
     }
 
+    pub fn get_current_branch() -> anyhow::Result<String, GinspError> {
+        let output = Self::run_git_command(&["rev-parse", "--abbrev-ref", "HEAD"])?;
+        let branch =
+            String::from_utf8(output.stdout).map_err(|err| GinspError::System(err.to_string()))?;
+        Ok(branch.trim().to_string())
+    }
+
     fn run_git_command(args: &[&str]) -> anyhow::Result<Output, GinspError> {
         let output = Command::new("git")
             .args(args)
