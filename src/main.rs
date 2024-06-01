@@ -1,7 +1,8 @@
 mod cli;
 mod config;
 mod error;
-mod service;
+mod git;
+mod jira;
 
 use anyhow::{Ok, Result};
 

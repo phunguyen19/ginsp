@@ -1,7 +1,7 @@
 use crate::cli::{Cli, CommandHandler};
 use crate::config::{Config, ProjectManagement, ProjectManagementProvider};
 use crate::error::{ConfigErrorKind, GinspError};
-use crate::{cli, service};
+use crate::{cli, git, jira};
 use indexmap::indexmap;
 use regex::Regex;
 use std::process::Command;
@@ -36,8 +36,8 @@ impl DiffMessage {
 impl CommandHandler for DiffMessage {
     fn execute(&self, cli: &Cli) -> anyhow::Result<()> {
         // validate git is installed and the current directory is a git repository
-        service::git::Git::validate_git_installed()?;
-        service::git::Git::validate_git_repo()?;
+        git::Git::validate_git_installed()?;
+        git::Git::validate_git_repo()?;
 
         // Get and validate command line options
         let options = match cli.subcommand {
@@ -58,7 +58,7 @@ impl CommandHandler for DiffMessage {
 
         // validate current branch is the target branch (branches[1])
         if is_cherry_pick {
-            let current_branch = service::git::Git::get_current_branch()?;
+            let current_branch = git::Git::get_current_branch()?;
             if current_branch != options.branches[1] {
                 return Err(GinspError::Cli(format!(
                     "Checkout to the target branch '{}' to use cherry-pick option.",
@@ -115,7 +115,7 @@ impl CommandHandler for DiffMessage {
                         println!("Doing cherry-pick {} {}", hash, message);
                     }
 
-                    match service::git::Git::cherry_pick(hash) {
+                    match git::Git::cherry_pick(hash) {
                         Ok(_) => {
                             commit.is_picked = true;
                             continue 'commit_loop;
@@ -124,8 +124,8 @@ impl CommandHandler for DiffMessage {
                             eprintln!("Fail to cherry-pick commit. Resetting current branch to the last commit hash {}...", last_commit_hash);
 
                             eprintln!("Aborting cherry-pick...");
-                            service::git::Git::cherry_pick_abort()
-                                .map(service::git::Git::print_std)
+                            git::Git::cherry_pick_abort()
+                                .map(git::Git::print_stderr)
                                 .map_err(|err| {
                                     GinspError::Git(format!(
                                         "Fail to abort cherry-pick. Error: {}",
@@ -137,8 +137,8 @@ impl CommandHandler for DiffMessage {
                                 "Resetting to commit hash {} (before doing cherry-pick)...",
                                 last_commit_hash
                             );
-                            service::git::Git::reset_hard(&last_commit_hash)
-                                .map(service::git::Git::print_std)
+                            git::Git::reset_hard(&last_commit_hash)
+                                .map(git::Git::print_stderr)
                                 .map_err(|err| {
                                     GinspError::Git(format!(
                                         "Fail to reset to commit hash {}. Error: {}",
@@ -306,9 +306,8 @@ fn get_ticket_status(
 
     let (username, password) = project_management.credential_key.split_at(split_at);
 
-    let status =
-        service::jira::Jira::get_ticket_status(url, username.to_string(), password.to_string())
-            .map_err(|err| GinspError::Http(err.to_string()))?;
+    let status = jira::Jira::get_ticket_status(url, username.to_string(), password.to_string())
+        .map_err(|err| GinspError::Http(err.to_string()))?;
 
     Ok(status)
 }

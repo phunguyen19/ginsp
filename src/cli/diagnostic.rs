@@ -1,6 +1,6 @@
 use crate::cli::{Cli, CommandHandler};
 use crate::config::Config;
-use crate::service;
+use crate::git;
 
 pub struct Diagnostic {}
 
@@ -12,9 +12,9 @@ impl Diagnostic {
 
 impl CommandHandler for Diagnostic {
     fn execute(&self, _cli: &Cli) -> anyhow::Result<()> {
-        service::git::Git::validate_git_installed()?;
+        git::Git::validate_git_installed()?;
         println!("Git is installed.");
-        service::git::Git::validate_git_repo()?;
+        git::Git::validate_git_repo()?;
         println!("Git repository is valid.");
         let _ = Config::read_config_file_from_home_dir()?;
         println!("Config file is valid.");

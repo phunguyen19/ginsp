@@ -44,8 +44,12 @@ impl Git {
         Self::run_git_command(&["reset", "--hard", hash])
     }
 
-    pub fn print_std(stdout: ProcessCommandStdout) {
+    pub fn print_stdout(stdout: ProcessCommandStdout) {
         println!("{}", stdout);
+    }
+
+    pub fn print_stderr(stderr: ProcessCommandStdout) {
+        eprintln!("{}", stderr);
     }
 
     fn run_git_command(args: &[&str]) -> anyhow::Result<ProcessCommandStdout, GinspError> {

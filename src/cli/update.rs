@@ -1,6 +1,6 @@
 use crate::cli::{Cli, CommandHandler};
 use crate::error::GinspError;
-use crate::{cli, service};
+use crate::{cli, git};
 
 pub struct Update {}
 
@@ -18,17 +18,17 @@ impl CommandHandler for Update {
             _ => return Err(GinspError::Cli("Invalid subcommand".to_string()).into()),
         };
 
-        service::git::Git::validate_git_installed()?;
+        git::Git::validate_git_installed()?;
 
-        service::git::Git::validate_git_repo()?;
+        git::Git::validate_git_repo()?;
 
         if update_cmd.verbose {
             println!("Fetching all branches.");
         }
-        service::git::Git::fetch_all()
+        git::Git::fetch_all()
             .map(|std| {
                 if update_cmd.verbose {
-                    service::git::Git::print_std(std);
+                    git::Git::print_stdout(std);
                 }
             })
             .map_err(|err| {
@@ -39,10 +39,10 @@ impl CommandHandler for Update {
             if update_cmd.verbose {
                 println!("Checking out branch: {}", branch);
             }
-            service::git::Git::checkout_branch(branch)
+            git::Git::checkout_branch(branch)
                 .map(|std| {
                     if update_cmd.verbose {
-                        service::git::Git::print_std(std);
+                        git::Git::print_stdout(std);
                     }
                 })
                 .map_err(|err| {
@@ -52,10 +52,10 @@ impl CommandHandler for Update {
             if update_cmd.verbose {
                 println!("Pulling branch: {}", branch);
             }
-            service::git::Git::pull_branch()
+            git::Git::pull_branch()
                 .map(|std| {
                     if update_cmd.verbose {
-                        service::git::Git::print_std(std);
+                        git::Git::print_stdout(std);
                     }
                 })
                 .map_err(|err| GinspError::Git(format!("Fail to pull branch. Error: {}", err)))?;
