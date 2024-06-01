@@ -327,7 +327,8 @@ fn get_ticket_status(
 fn print_result(branch: &str, commits: Vec<CommitInfo>) {
     println!("\nCommit messages unique on {}:", branch);
     println!("------------------------");
-    for item in commits {
+    let len = commits.len();
+    for (index, item) in commits.into_iter().enumerate() {
         let CommitInfo {
             hash,
             message,
@@ -335,10 +336,11 @@ fn print_result(branch: &str, commits: Vec<CommitInfo>) {
         } = item;
 
         if status.is_none() {
-            println!("    {} - {}", hash, message);
+            println!("   {:>3} - {} - {}", len - index, hash, message);
         } else {
             println!(
-                "    {} - {} - {}",
+                "   {:3} - {} - {} - {}",
+                len - index,
                 hash,
                 status.unwrap_or_default(),
                 message
