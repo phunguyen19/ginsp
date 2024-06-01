@@ -6,7 +6,7 @@ mod service;
 mod utils;
 
 use crate::cli::CommandHandler;
-use crate::commands::{command_diff, command_update};
+use crate::commands::command_diff;
 use anyhow::{Ok, Result};
 use clap::Parser;
 
@@ -17,8 +17,8 @@ fn main() -> Result<()> {
         cli::SubCommand::Version => {
             cli::version::Version::new().execute(&options)?;
         }
-        cli::SubCommand::Update(update_cmd) => {
-            command_update(update_cmd.branches.clone())?;
+        cli::SubCommand::Update(_) => {
+            cli::update::Update::new().execute(&options)?;
         }
         cli::SubCommand::DiffMessage(diff_cmd) => {
             command_diff(diff_cmd)?;

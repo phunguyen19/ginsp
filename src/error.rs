@@ -3,6 +3,8 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum GinspError {
+    #[error("Cli error: {0}")]
+    Cli(String),
     #[error("Config error: {0}")]
     Config(ConfigErrorKind),
     #[error("Git error: {0}")]

@@ -1,5 +1,6 @@
-pub mod diagnostic;
-pub mod version;
+pub(crate) mod diagnostic;
+pub(crate) mod update;
+pub(crate) mod version;
 
 use clap::Parser;
 
