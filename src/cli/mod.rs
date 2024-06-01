@@ -1,4 +1,5 @@
 pub(crate) mod diagnostic;
+pub(crate) mod diff_message;
 pub(crate) mod update;
 pub(crate) mod version;
 
@@ -57,6 +58,29 @@ pub struct DiffMessageParams {
     /// For example: `ginsp diff-message master develop -p`
     #[clap(short = 't', long = "ticket-status", default_value = "false")]
     pub is_fetch_ticket_status: bool,
+}
+
+impl Cli {
+    pub fn run() -> anyhow::Result<()> {
+        let options = Cli::parse();
+
+        match &options.subcommand {
+            SubCommand::Version => {
+                version::Version::new().execute(&options)?;
+            }
+            SubCommand::Update(_) => {
+                update::Update::new().execute(&options)?;
+            }
+            SubCommand::DiffMessage(_) => {
+                diff_message::DiffMessage::new().execute(&options)?;
+            }
+            SubCommand::Diagnostic => {
+                diagnostic::Diagnostic::new().execute(&options)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 pub trait CommandHandler {

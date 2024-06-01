@@ -1,12 +1,13 @@
+use crate::cli::{Cli, CommandHandler};
 use crate::config::{Config, ProjectManagement, ProjectManagementProvider};
-use crate::service;
-use crate::utils::exit_with_error;
-use std::process::Command;
-
-use crate::cli::DiffMessageParams;
 use crate::error::{ConfigErrorKind, GinspError};
+use crate::utils::exit_with_error;
+use crate::{cli, service};
 use indexmap::indexmap;
 use regex::Regex;
+use std::process::Command;
+
+pub struct DiffMessage {}
 
 pub struct CommitInfo {
     pub hash: String,
@@ -25,121 +26,134 @@ impl From<&RawCommitInfo> for CommitInfo {
     }
 }
 
-pub fn command_diff(diff_options: &DiffMessageParams) -> anyhow::Result<(), GinspError> {
-    service::git::Git::validate_git_installed()?;
-    service::git::Git::validate_git_repo()?;
+impl DiffMessage {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
-    let source_branch = &diff_options.branches[0];
-    let target_branch = &diff_options.branches[1];
+impl CommandHandler for DiffMessage {
+    fn execute(&self, cli: &Cli) -> anyhow::Result<()> {
+        let diff_options = match cli.subcommand {
+            cli::SubCommand::DiffMessage(ref diff_cmd) => diff_cmd,
+            _ => return Err(GinspError::Cli("Invalid subcommand".to_string()).into()),
+        };
 
-    let source_map = load_commits_as_map(source_branch)?;
-    let target_map = load_commits_as_map(target_branch)?;
+        service::git::Git::validate_git_installed()?;
+        service::git::Git::validate_git_repo()?;
 
-    let unique_to_source = unique_by_message(&source_map, &target_map);
-    let unique_to_target = unique_by_message(&target_map, &source_map);
+        let source_branch = &diff_options.branches[0];
+        let target_branch = &diff_options.branches[1];
 
-    if diff_options.pick_contains.is_some() {
-        println!(
-            "Cherry picking {}...",
-            diff_options.pick_contains.as_ref().unwrap()
-        );
+        let source_map = load_commits_as_map(source_branch)?;
+        let target_map = load_commits_as_map(target_branch)?;
 
-        // Parse cherry pick substrings
-        let cherry_pick_messages = diff_options
-            .pick_contains
-            .as_ref()
-            .map(|s| s.split(',').collect::<Vec<_>>())
-            .unwrap_or_default();
+        let unique_to_source = unique_by_message(&source_map, &target_map);
+        let unique_to_target = unique_by_message(&target_map, &source_map);
 
-        // This is used to reset to last commit hash if cherry pick fails
-        let last_commit_hash = get_last_commit_hash()?;
+        if diff_options.pick_contains.is_some() {
+            println!(
+                "Cherry picking {}...",
+                diff_options.pick_contains.as_ref().unwrap()
+            );
 
-        // for each unique commit on source branch, if in the cherry pick list, cherry pick it to target branch
-        'outer: for RawCommitInfo(hash, message) in unique_to_source.iter().rev() {
-            // for each cherry pick commit message
-            // if the cherry pick commit message is a substring of the source commit message
-            // cherry pick the source commit to target branch
-            'inner: for cherry_pick_message in cherry_pick_messages.iter() {
-                if !message.contains(cherry_pick_message) {
-                    continue 'inner;
-                }
+            // Parse cherry-pick substrings
+            let cherry_pick_messages = diff_options
+                .pick_contains
+                .as_ref()
+                .map(|s| s.split(',').collect::<Vec<_>>())
+                .unwrap_or_default();
 
-                println!("Cherry picking {} - {}", hash, message);
-                let output = Command::new("git")
-                    .arg("cherry-pick")
-                    .arg(hash)
-                    .output()
-                    .map_err(|err| GinspError::Git(err.to_string()))?;
-                if output.status.success() {
-                    continue 'outer;
-                }
+            // This is used to reset to last commit hash if cherry-pick fails
+            let last_commit_hash = get_last_commit_hash()?;
 
-                println!("Fail to cherry pick commit {} - {}", hash, message);
+            // for each unique commit on source branch, if in the cherry-pick list, cherry-pick it to target branch
+            'outer: for RawCommitInfo(hash, message) in unique_to_source.iter().rev() {
+                // for each cherry-pick commit message
+                // if the cherry-pick commit message is a substring of the source commit message
+                // cherry-pick the source commit to target branch
+                'inner: for cherry_pick_message in cherry_pick_messages.iter() {
+                    if !message.contains(cherry_pick_message) {
+                        continue 'inner;
+                    }
 
-                // cherry-pick abort
-                println!("Abort cherry pick...");
-                let output = Command::new("git")
-                    .arg("cherry-pick")
-                    .arg("--abort")
-                    .output()
-                    .map_err(|err| GinspError::Git(err.to_string()))?;
+                    println!("Cherry picking {} - {}", hash, message);
+                    let output = Command::new("git")
+                        .arg("cherry-pick")
+                        .arg(hash)
+                        .output()
+                        .map_err(|err| GinspError::Git(err.to_string()))?;
+                    if output.status.success() {
+                        continue 'outer;
+                    }
 
-                if !output.status.success() {
-                    let err = String::from_utf8(output.stderr)
-                        .map_err(|err| GinspError::System(err.to_string()))?;
+                    println!("Fail to cherry-pick commit {} - {}", hash, message);
+
+                    // cherry-pick abort
+                    println!("Abort cherry-pick...");
+                    let output = Command::new("git")
+                        .arg("cherry-pick")
+                        .arg("--abort")
+                        .output()
+                        .map_err(|err| GinspError::Git(err.to_string()))?;
+
+                    if !output.status.success() {
+                        let err = String::from_utf8(output.stderr)
+                            .map_err(|err| GinspError::System(err.to_string()))?;
+                        exit_with_error(&format!(
+                            "Fail to abort cherry-pick commit '{}'. Error: {}",
+                            hash, err
+                        ));
+                    }
+                    // reset to last commit hash
+                    println!("Reset to commit hash {}...", last_commit_hash);
+                    let output = Command::new("git")
+                        .arg("reset")
+                        .arg("--hard")
+                        .arg(&last_commit_hash)
+                        .output()
+                        .map_err(|err| GinspError::Git(err.to_string()))?;
+
+                    if !output.status.success() {
+                        exit_with_error(&format!(
+                            "Fail to reset to commit hash {}. Error: {}",
+                            last_commit_hash,
+                            String::from_utf8(output.stderr)
+                                .map_err(|err| GinspError::System(err.to_string()))?
+                        ));
+                    }
+
                     exit_with_error(&format!(
-                        "Fail to abort cherry pick commit '{}'. Error: {}",
-                        hash, err
+                        "Error: Fail to cherry-pick commit {} - {}",
+                        hash, message
                     ));
                 }
-                // reset to last commit hash
-                println!("Reset to commit hash {}...", last_commit_hash);
-                let output = Command::new("git")
-                    .arg("reset")
-                    .arg("--hard")
-                    .arg(&last_commit_hash)
-                    .output()
-                    .map_err(|err| GinspError::Git(err.to_string()))?;
-
-                if !output.status.success() {
-                    exit_with_error(&format!(
-                        "Fail to reset to commit hash {}. Error: {}",
-                        last_commit_hash,
-                        String::from_utf8(output.stderr)
-                            .map_err(|err| GinspError::System(err.to_string()))?
-                    ));
-                }
-
-                exit_with_error(&format!(
-                    "Error: Fail to cherry pick commit {} - {}",
-                    hash, message
-                ));
             }
         }
+
+        let mut unique_to_source = unique_to_source
+            .iter()
+            .map(CommitInfo::from)
+            .collect::<Vec<_>>();
+
+        // convert unique_to_target to Vec<CommitInfo>
+        let mut unique_to_target = unique_to_target
+            .iter()
+            .map(CommitInfo::from)
+            .collect::<Vec<_>>();
+
+        if diff_options.is_fetch_ticket_status {
+            let profile = Config::read_config_file_from_home_dir()?;
+            unique_to_source = map_ticket_status(unique_to_source, &profile);
+            unique_to_target = map_ticket_status(unique_to_target, &profile);
+        }
+
+        print_result(source_branch, unique_to_source);
+        print_result(target_branch, unique_to_target);
+        println!();
+
+        Ok(())
     }
-
-    let mut unique_to_source = unique_to_source
-        .iter()
-        .map(CommitInfo::from)
-        .collect::<Vec<_>>();
-
-    // convert unique_to_target to Vec<CommitInfo>
-    let mut unique_to_target = unique_to_target
-        .iter()
-        .map(CommitInfo::from)
-        .collect::<Vec<_>>();
-
-    if diff_options.is_fetch_ticket_status {
-        let profile = Config::read_config_file_from_home_dir()?;
-        unique_to_source = map_ticket_status(unique_to_source, &profile);
-        unique_to_target = map_ticket_status(unique_to_target, &profile);
-    }
-
-    print_result(source_branch, unique_to_source);
-    print_result(target_branch, unique_to_target);
-    println!();
-
-    Ok(())
 }
 
 fn map_ticket_status(commits: Vec<CommitInfo>, profile: &Config) -> Vec<CommitInfo> {
