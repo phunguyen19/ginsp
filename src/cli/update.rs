@@ -19,15 +19,46 @@ impl CommandHandler for Update {
         };
 
         service::git::Git::validate_git_installed()?;
+
         service::git::Git::validate_git_repo()?;
 
-        service::git::Git::fetch_all().map_err(|err| {
-            GinspError::Git(format!("Fail to fetch all branches. Error: {}", err))
-        })?;
+        if update_cmd.verbose {
+            println!("Fetching all branches.");
+        }
+        service::git::Git::fetch_all()
+            .map(|std| {
+                if update_cmd.verbose {
+                    service::git::Git::print_std(std);
+                }
+            })
+            .map_err(|err| {
+                GinspError::Git(format!("Fail to fetch all branches. Error: {}", err))
+            })?;
 
         for branch in update_cmd.branches.iter() {
-            service::git::Git::checkout_branch(branch)?;
-            service::git::Git::pull_branch()?;
+            if update_cmd.verbose {
+                println!("Checking out branch: {}", branch);
+            }
+            service::git::Git::checkout_branch(branch)
+                .map(|std| {
+                    if update_cmd.verbose {
+                        service::git::Git::print_std(std);
+                    }
+                })
+                .map_err(|err| {
+                    GinspError::Git(format!("Fail to checkout branch. Error: {}", err))
+                })?;
+
+            if update_cmd.verbose {
+                println!("Pulling branch: {}", branch);
+            }
+            service::git::Git::pull_branch()
+                .map(|std| {
+                    if update_cmd.verbose {
+                        service::git::Git::print_std(std);
+                    }
+                })
+                .map_err(|err| GinspError::Git(format!("Fail to pull branch. Error: {}", err)))?;
         }
 
         anyhow::Ok(())

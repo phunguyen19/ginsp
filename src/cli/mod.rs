@@ -39,6 +39,9 @@ pub struct Update {
     /// and `git pull` on each branch.
     #[clap(name = "branches", required = true)]
     pub branches: Vec<String>,
+
+    #[clap(short, long, default_value = "false")]
+    pub verbose: bool,
 }
 
 #[derive(Parser, Debug)]
