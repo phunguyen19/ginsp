@@ -59,4 +59,3 @@ jobs:
           bin: ginsp
           # (required) GitHub token for uploading assets to GitHub Releases.
           token: ${{ secrets.RELEASE_TOKEN }}
-        if: matrix.target != '' && matrix.build_tool == 'cargo'
